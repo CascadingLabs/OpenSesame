@@ -8,7 +8,11 @@ import asyncio
 import json
 from pathlib import Path
 
-from open_sesame.harness.gauntlet import crawl_gauntlet_httpx, probe_yosoi_auto
+from open_sesame.harness.gauntlet import (
+    crawl_gauntlet_httpx,
+    crawl_gauntlet_voidcrawl_profile,
+    probe_yosoi_auto,
+)
 
 TARGET_URL = "https://fortress.theplumber.dev/"
 
@@ -18,14 +22,40 @@ def main() -> None:
     parser.add_argument("--url", default=TARGET_URL)
     parser.add_argument("--max-pages", type=int, default=10)
     parser.add_argument("--timeout", type=float, default=15.0)
-    parser.add_argument("--engine", choices=["httpx", "yosoi-auto"], default="httpx")
+    parser.add_argument(
+        "--engine",
+        choices=["httpx", "yosoi-auto", "voidcrawl-profile"],
+        default="httpx",
+    )
     parser.add_argument("--yosoi-path", type=Path, default=Path("../Yosoi"))
+    parser.add_argument("--profile-dir", type=Path, default=Path(".local/fortress-profile"))
+    parser.add_argument("--attempts", type=int, default=1)
+    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--chrome-executable")
+    parser.add_argument("--screenshot-dir", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     if args.engine == "yosoi-auto":
         summary = None
         results = (asyncio.run(probe_yosoi_auto(args.url, yosoi_path=args.yosoi_path, timeout=int(args.timeout))),)
+    elif args.engine == "voidcrawl-profile":
+        summary = None
+        results = ()
+        for _ in range(args.attempts):
+            summary, results = asyncio.run(
+                crawl_gauntlet_voidcrawl_profile(
+                    args.url,
+                    profile_dir=args.profile_dir,
+                    max_pages=args.max_pages,
+                    timeout=args.timeout,
+                    headful=not args.headless,
+                    chrome_executable=args.chrome_executable,
+                    screenshot_dir=args.screenshot_dir,
+                )
+            )
+            if not results or not results[0].blocked:
+                break
     else:
         summary, results = asyncio.run(
             crawl_gauntlet_httpx(args.url, max_pages=args.max_pages, timeout=args.timeout)

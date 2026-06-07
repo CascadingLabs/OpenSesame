@@ -83,8 +83,15 @@ Fortress anti-bot throughput probe:
 ```bash
 PYTHONPATH=src python examples/throughput_fortress.py --attempts 25 --concurrency 5
 PYTHONPATH=src python examples/fortress_gauntlet.py --engine httpx --max-pages 10 --json
+PYTHONPATH=src:/home/andrew/Desktop/cl/VoidCrawl /home/andrew/Desktop/cl/VoidCrawl/.venv/bin/python examples/fortress_gauntlet.py --engine voidcrawl-profile --profile-dir .local/fortress-profile --screenshot-dir .local/fortress-shots --max-pages 10 --attempts 3 --json
 PYTHONPATH=/home/andrew/Desktop/cl/OpenSesame/src:/home/andrew/Desktop/cl/Yosoi uv run python /home/andrew/Desktop/cl/OpenSesame/examples/fortress_gauntlet.py --engine yosoi-auto --yosoi-path /home/andrew/Desktop/cl/Yosoi --json
 ```
+
+The VoidCrawl profile engine runs a single persistent headful Chrome profile by
+default. It records Turnstile evidence such as `data-sitekey`, iframe-derived
+sitekey, action/cdata, token presence/length, detected captcha kind, and
+screenshots when requested. Sitekey is enough to feed a future token-provider
+adapter, but OpenSesame still treats browser clearance as a separate outcome.
 
 ## Test targets
 
