@@ -22,3 +22,12 @@ def test_synthetic_targets_are_not_marked_as_holdout() -> None:
 
     assert targets
     assert all(not target.holdout_candidate for target in targets)
+
+
+def test_fortress_is_registered_as_throughput_antibot_target() -> None:
+    targets = targets_for_family("cloudflare_managed")
+
+    fortress = next(target for target in targets if target.id == "fortress-cloudflare-managed")
+    assert fortress.kind == "live_antibot"
+    assert fortress.throughput_candidate
+    assert "fortress.theplumber.dev" in fortress.url

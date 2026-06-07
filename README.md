@@ -78,10 +78,18 @@ PYTHONPATH=src python examples/classify_image.py image.jpg --labels "bus,crosswa
 PYTHONPATH=src python examples/classify_image_grid.py grid.jpg --rows 3 --cols 3 --labels "bus,crosswalk,traffic light"
 ```
 
+Fortress anti-bot throughput probe:
+
+```bash
+PYTHONPATH=src python examples/throughput_fortress.py --attempts 25 --concurrency 5
+```
+
 ## Test targets
 
 See [docs/ocr-test-sites.md](docs/ocr-test-sites.md) for live held-out targets
-and self-hosted/synthetic sources.
+and self-hosted/synthetic sources. See
+[docs/throughput-targets.md](docs/throughput-targets.md) for anti-bot routing
+throughput targets.
 
 ## Related projects
 

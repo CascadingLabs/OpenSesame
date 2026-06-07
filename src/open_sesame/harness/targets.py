@@ -1,12 +1,12 @@
-"""Seed target registry for OCR captcha evaluation."""
+"""Seed target registry for captcha and anti-bot evaluation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
-CaptchaFamily = Literal["normal_ocr", "synthetic_ocr"]
-TargetKind = Literal["live_demo", "self_host", "synthetic"]
+CaptchaFamily = Literal["normal_ocr", "synthetic_ocr", "cloudflare_managed"]
+TargetKind = Literal["live_demo", "live_antibot", "self_host", "synthetic"]
 
 
 @dataclass(frozen=True)
@@ -20,6 +20,7 @@ class Target:
     notes: str
     requires_account: bool = False
     holdout_candidate: bool = False
+    throughput_candidate: bool = False
 
 
 DEFAULT_TARGETS: tuple[Target, ...] = (
@@ -54,6 +55,20 @@ DEFAULT_TARGETS: tuple[Target, ...] = (
         notes="Candidate live normal-captcha route from CaptchaSonic demo listing.",
         requires_account=True,
         holdout_candidate=True,
+    ),
+    Target(
+        id="fortress-cloudflare-managed",
+        title="Fortress Cloudflare managed challenge",
+        family="cloudflare_managed",
+        kind="live_antibot",
+        url="https://fortress.theplumber.dev/",
+        source="CAS-181 throughput target",
+        notes=(
+            "Hard live Cloudflare managed challenge with Turnstile assets. Use as "
+            "a throughput/routing benchmark, not an OCR or image-classification target."
+        ),
+        holdout_candidate=True,
+        throughput_candidate=True,
     ),
     Target(
         id="securimage-selfhost",
