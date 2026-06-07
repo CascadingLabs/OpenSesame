@@ -71,6 +71,13 @@ Labeled corpus eval:
 PYTHONPATH=src python examples/eval_ocr_corpus.py path/to/corpus.jsonl --solver local-ml --model grafj-crnn-base --cache-dir .local/hf --local-files-only --allow-remote-code --json
 ```
 
+Image classification experiments:
+
+```bash
+PYTHONPATH=src python examples/classify_image.py image.jpg --labels "bus,crosswalk,traffic light" --model openai/clip-vit-base-patch32
+PYTHONPATH=src python examples/classify_image_grid.py grid.jpg --rows 3 --cols 3 --labels "bus,crosswalk,traffic light"
+```
+
 ## Test targets
 
 See [docs/ocr-test-sites.md](docs/ocr-test-sites.md) for live held-out targets
