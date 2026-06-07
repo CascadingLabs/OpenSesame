@@ -82,6 +82,8 @@ Fortress anti-bot throughput probe:
 
 ```bash
 PYTHONPATH=src python examples/throughput_fortress.py --attempts 25 --concurrency 5
+PYTHONPATH=src python examples/fortress_gauntlet.py --engine httpx --max-pages 10 --json
+PYTHONPATH=/home/andrew/Desktop/cl/OpenSesame/src:/home/andrew/Desktop/cl/Yosoi uv run python /home/andrew/Desktop/cl/OpenSesame/examples/fortress_gauntlet.py --engine yosoi-auto --yosoi-path /home/andrew/Desktop/cl/Yosoi --json
 ```
 
 ## Test targets

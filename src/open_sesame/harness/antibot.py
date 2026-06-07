@@ -76,3 +76,40 @@ def classify_antibot_response(
         confidence=0.0,
         signals=tuple(signals),
     )
+
+
+def extract_page_links(html: str, base_url: str) -> tuple[str, ...]:
+    """Extract same-origin links from HTML for shallow gauntlet enumeration."""
+
+    from html.parser import HTMLParser
+    from urllib.parse import urldefrag, urljoin, urlparse
+
+    class LinkParser(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.hrefs: list[str] = []
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            if tag.lower() != "a":
+                return
+            for key, value in attrs:
+                if key.lower() == "href" and value:
+                    self.hrefs.append(value)
+
+    parser = LinkParser()
+    parser.feed(html)
+    base = urlparse(base_url)
+    links: list[str] = []
+    seen: set[str] = set()
+    for href in parser.hrefs:
+        absolute, _fragment = urldefrag(urljoin(base_url, href))
+        parsed = urlparse(absolute)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        if parsed.netloc != base.netloc:
+            continue
+        if absolute in seen:
+            continue
+        seen.add(absolute)
+        links.append(absolute)
+    return tuple(links)
