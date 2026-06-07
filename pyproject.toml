@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "open-sesame"
+version = "0.1.0"
+description = "Self-hosted captcha/token-solving microservice with no paid solver APIs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Cascading Labs" }]
+dependencies = [
+  "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+live = [
+  "voidcrawl>=0.3.4",
+]
+ml = [
+  "huggingface-hub>=0.36",
+  "pillow>=12",
+  "psutil>=7.0",
+  "torch>=2.0",
+  "transformers>=4.57",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/open_sesame"]

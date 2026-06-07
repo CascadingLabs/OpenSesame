@@ -2,13 +2,15 @@
 
 ## Project overview
 
-`OpenSesame` — Self-hosted captcha/token-solving microservice with no paid solver APIs.
-
-TODO: Replace this section with the repo's actual purpose, major responsibilities, and domain vocabulary.
+`OpenSesame` is an async-native self-hosted captcha/token-solving microservice
+with no paid solver APIs. It handles direct-answer captchas by producing answer
+candidates and browser/session-bound captchas by acting inside the live session
+that hit the challenge.
 
 ## Read first
 
 - this file
+- `docs/ocr-test-sites.md` when working on OCR targets
 - relevant package or module README files
 - nested `AGENTS.md` files in the area being changed, if present
 
@@ -23,21 +25,34 @@ TODO: Replace this section with the repo's actual purpose, major responsibilitie
 
 ## Key commands
 
-TODO: Add the canonical commands for setup, formatting, linting, type checking, tests, and build/release workflows.
+```bash
+PYTHONPATH=src python -m pytest
+```
 
 ## Repository map
 
-TODO: Replace with the actual top-level structure and important directories.
+- `src/open_sesame/contracts.py` — shared solver result contracts
+- `src/open_sesame/solvers/` — solver implementations
+- `src/open_sesame/harness/` — target registry and future runner/scoreboard
+- `docs/` — durable implementation notes and target research
+- `tests/` — focused unit tests
 
 ## Architecture and constraints
 
-TODO: Record the important boundaries, invariants, integrations, and change-sensitive areas agents must preserve.
+- Direct-answer solvers return `SolveResult(kind="answer")`; they do not mint
+  or fake browser-bound tokens.
+- Session-bound captcha work must preserve the live browser/session invariant:
+  the useful token is minted in the same session that encountered the wall.
+- Browser/session harnesses should use `VoidCrawl`; HTTP fetches should use
+  async `httpx` clients.
+- `CAS-170` should stay a generalist OCR path. Do not create one model per site
+  unless an active-learning loop explicitly gates that exception.
 
 If the repo grows complex enough, split deeper architecture notes into dedicated committed docs and link them from here.
 
 ## Validation
 
-TODO: Add the smallest useful checks for routine changes and the broader checks expected before merge or release.
+Run `PYTHONPATH=src python -m pytest` for routine Python changes.
 
 If the repo develops a substantial testing strategy, split the details into a dedicated committed testing document and link it from here.
 

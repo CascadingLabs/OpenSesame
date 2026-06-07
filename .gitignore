@@ -61,12 +61,12 @@ Thumbs.db
 # ==========================================
 # Python (uncomment if this is a Python project)
 # ==========================================
-# __pycache__/
-# *.py[cod]
-# .venv/
-# .pytest_cache/
-# .mypy_cache/
-# .ruff_cache/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # ==========================================
 # Rust (uncomment if this is a Rust project)

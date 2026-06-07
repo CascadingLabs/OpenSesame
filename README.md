@@ -15,15 +15,66 @@
 
 # OpenSesame
 
-Self-hosted captcha/token-solving microservice with no paid solver APIs.
+Async-native self-hosted captcha/token-solving microservice with no paid
+solver APIs.
 
 ## Usage
 
-<!-- Quickstart: the one or two commands someone copy-pastes to try it. -->
+OCR fast-path smoke:
+
+```bash
+PYTHONPATH=src python - <<'PY'
+from open_sesame.solvers.ocr import normalize_ocr_text
+
+print(normalize_ocr_text(" A8 b-2 "))
+PY
+```
 
 ## Development
 
-<!-- Clone, install, run tests. -->
+```bash
+PYTHONPATH=src python -m pytest
+```
+
+The first OCR slice tracks `CAS-170`: normal distorted-text captchas where the
+answer is the text in the image. The current implementation provides the
+Tesseract fast-path contract and target registry; CRNN training is a later
+slice.
+
+Live 2Captcha smoke:
+
+```bash
+PYTHONPATH=src python examples/live_2captcha_normal.py --mode oracle
+PYTHONPATH=src /home/andrew/Desktop/cl/VoidCrawl/.venv/bin/python examples/live_2captcha_normal.py --mode ocr --solver local-ml --model grafj-crnn-base --cache-dir .local/hf --local-files-only --allow-remote-code --ml-python python
+```
+
+The live harness uses `VoidCrawl` for stealth browser/session work and `httpx`
+for async HTTP fetches.
+
+Local downloadable OCR models:
+
+```bash
+PYTHONPATH=src python examples/local_ocr_model.py --list
+PYTHONPATH=src python examples/local_ocr_model.py --model grafj-crnn-base --cache-dir .local/hf --allow-remote-code --download
+PYTHONPATH=src python examples/benchmark_ocr_model.py /tmp/opensesame-2captcha-sample.jpg --model grafj-crnn-base --cache-dir .local/hf --allow-remote-code --json
+PYTHONPATH=src python examples/live_2captcha_ocr_fetch.py --model grafj-crnn-base --cache-dir .local/hf --local-files-only --allow-remote-code
+```
+
+Benchmark output includes model load time, first inference time, warm latency,
+RSS memory, CPU load, and GPU metrics when the selected device resolves to a GPU.
+The Graf-J models use pinned Hugging Face revisions with custom model code, so
+local execution requires explicit `--allow-remote-code`.
+
+Labeled corpus eval:
+
+```bash
+PYTHONPATH=src python examples/eval_ocr_corpus.py path/to/corpus.jsonl --solver local-ml --model grafj-crnn-base --cache-dir .local/hf --local-files-only --allow-remote-code --json
+```
+
+## Test targets
+
+See [docs/ocr-test-sites.md](docs/ocr-test-sites.md) for live held-out targets
+and self-hosted/synthetic sources.
 
 ## Related projects
 
