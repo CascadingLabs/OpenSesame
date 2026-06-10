@@ -8,7 +8,7 @@ from OpenSesame.api.engines import recaptcha_audio
 from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
 from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
 from OpenSesame.api.engines.recaptcha_audio import RecaptchaAudioEngine, normalize_answer
-from OpenSesame.api.engines.recaptcha_grid import parse_target
+from OpenSesame.api.engines.recaptcha_grid import RecaptchaGridEngine, parse_target
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelRegistry
 from OpenSesame.api.result import AnswerSolution, Family, SolveResult, SolveStatus, TokenSolution
@@ -95,6 +95,57 @@ def test_audio_engine_surfaces_rate_limit(monkeypatch) -> None:
     ch = Challenge(family=Family.RECAPTCHA_V2, url="https://www.google.com/x", host="www.google.com")
     result = run(RecaptchaAudioEngine().solve(ch, RatePage(), registry=reg, policy=POLICY))
     assert result.status is SolveStatus.RATE_LIMITED
+
+
+# -- enterprise selectors + honest cross-origin signal --------------------
+
+def test_engines_match_enterprise_frames() -> None:
+    """v2 + Enterprise share challenge DOM; selectors must match both bframes."""
+    from OpenSesame.api.engines import recaptcha_grid
+    for js in (recaptcha_audio._AUDIO_STATE, recaptcha_grid._GRID_STATE):
+        assert 'src*="api2/bframe"' in js
+        assert 'src*="enterprise/bframe"' in js
+
+
+class CrossOriginGridPage:
+    """A real third-party site: the bframe is present but cross-origin."""
+
+    async def eval_js(self, js: str):
+        if "rc-imageselect-instructions" in js:        # _GRID_STATE
+            return {"ok": False, "reason": "cross-origin"}
+        if "#rc-imageselect'" in js:                   # _open_challenge "already open?" probe
+            return True                                # skip the open loop
+        return None
+
+
+class NoFrameGridPage(CrossOriginGridPage):
+    async def eval_js(self, js: str):
+        if "rc-imageselect-instructions" in js:
+            return {"ok": False, "reason": "no-frame"}
+        if "#rc-imageselect'" in js:
+            return True
+        return None
+
+
+def test_grid_cross_origin_is_honest_failure() -> None:
+    reg = ModelRegistry()
+    reg.register_factory("tiles", lambda key: object())
+    ch = Challenge(family=Family.RECAPTCHA_V2, url="https://shop.example/checkout",
+                   host="shop.example", vendor_kind="recaptcha")
+    result = run(RecaptchaGridEngine().solve(ch, CrossOriginGridPage(), registry=reg, policy=POLICY))
+    assert result.status is SolveStatus.FAILED
+    assert result.metadata.get("cross_origin") is True     # machine-detectable, not vague
+    assert "coordinate engine" in result.error
+
+
+def test_grid_no_frame_is_plain_failure_not_cross_origin() -> None:
+    reg = ModelRegistry()
+    reg.register_factory("tiles", lambda key: object())
+    ch = Challenge(family=Family.RECAPTCHA_V2, url="https://shop.example/checkout",
+                   host="shop.example", vendor_kind="recaptcha")
+    result = run(RecaptchaGridEngine().solve(ch, NoFrameGridPage(), registry=reg, policy=POLICY))
+    assert result.status is SolveStatus.FAILED
+    assert "cross_origin" not in result.metadata           # no frame at all != cross-origin
 
 
 # -- OCR engine -----------------------------------------------------------

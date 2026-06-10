@@ -35,6 +35,18 @@ from OpenSesame.api.result import (
 )
 
 
+# Families OpenSesame deliberately does not solve. reCAPTCHA v3 is score-based —
+# there is no challenge to crack, only a reputation/behavior signal — and
+# hCaptcha / Turnstile are out of the v1 scope. These are a *detect-and-route*
+# concern (hand off to the anti-bot/proxy layer), so we REFUSE with a clear
+# route hint rather than returning a vague "no engine registered" FAILED.
+_OUT_OF_SCOPE_ROUTES: dict[Family, str] = {
+    Family.RECAPTCHA_V3: "reCAPTCHA v3 is score-based (no challenge to solve) — route to the anti-bot layer",
+    Family.HCAPTCHA: "hCaptcha is out of v1 scope — route to the anti-bot layer",
+    Family.TURNSTILE: "Cloudflare Turnstile is out of v1 scope — route to the anti-bot layer",
+}
+
+
 @dataclass
 class Ticket:
     """Handle to an in-flight solve. Backed by an asyncio task in v1."""
@@ -221,6 +233,17 @@ class Solver:
 
         engine = self._engines.get(challenge.family)
         if engine is None:
+            # Out-of-scope families are a routing decision, not a solve failure.
+            route = _OUT_OF_SCOPE_ROUTES.get(challenge.family)
+            if route is not None:
+                result = self._terminal(
+                    challenge, SolveStatus.REFUSED, correlation_id, started,
+                    policy=policy, error=route,
+                )
+                from dataclasses import replace
+                result = replace(result, metadata={"route": "anti-bot"})
+                self.audit.record(result, now=self._clock.wall())
+                return result
             return self._terminal(
                 challenge, SolveStatus.FAILED, correlation_id, started,
                 policy=policy, error=f"no engine registered for family {challenge.family.value}",

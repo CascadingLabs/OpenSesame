@@ -72,6 +72,20 @@ def test_no_engine_is_failed_value_not_raise() -> None:
     assert "no engine" in result.error
 
 
+@pytest.mark.parametrize(
+    "family",
+    [Family.RECAPTCHA_V3, Family.HCAPTCHA, Family.TURNSTILE],
+)
+def test_out_of_scope_family_is_refused_and_routed(family) -> None:
+    """v3/hCaptcha/Turnstile are detect-and-route, not a generic 'no engine' miss."""
+    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
+    ch = Challenge(family=family, url="https://www.google.com/x", host="www.google.com")
+    result = run(solver.solve(ch, PAGE))
+    assert result.status is SolveStatus.REFUSED
+    assert result.metadata.get("route") == "anti-bot"
+    assert "no engine" not in result.error      # a clear reason, not the generic miss
+
+
 def test_engine_timeout_is_value() -> None:
     policy = SolverPolicy(allow_sites=["www.google.com"], auto_timeout_s=0.05, audit_log=None)
     solver = Solver(policy)

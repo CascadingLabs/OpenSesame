@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.engines._recaptcha_dom import unreadable_result, with_selectors
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelKey, ModelRegistry
 from OpenSesame.api.result import (
@@ -31,10 +32,11 @@ DEFAULT_MODEL = "verytuffcat/recaptcha"
 PROVIDER_KIND = "tiles"
 
 # Structured grid state from the same-origin bframe DOM.
-_GRID_STATE = r"""
+_GRID_STATE = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
-  if (!f || !f.contentDocument) return {ok:false, reason:'cross-origin'};
+  const f = document.querySelector('__BFRAME_SEL__');
+  if (!f) return {ok:false, reason:'no-frame'};
+  if (!f.contentDocument) return {ok:false, reason:'cross-origin'};
   const doc = f.contentDocument;
   const tok = document.querySelector('#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
   const token = tok ? (tok.value || '') : '';
@@ -63,27 +65,27 @@ _GRID_STATE = r"""
     grid: {x:left, y:top, width:right-left, height:bottom-top},
   };
 })()
-"""
+""")
 
 # Click the td at a given flat index via the DOM.
-_CLICK_CELL = r"""
+_CLICK_CELL = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   const tds = f && f.contentDocument
     && f.contentDocument.querySelectorAll('#rc-imageselect-target table td');
   if (!tds || !tds[__I__]) return false;
   tds[__I__].click(); return true;
 })()
-"""
+""")
 
-_CLICK_VERIFY = r"""
+_CLICK_VERIFY = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   const el = f && f.contentDocument && f.contentDocument.querySelector('#recaptcha-verify-button');
   if (!el) return false;
   el.click(); return true;
 })()
-"""
+""")
 
 
 class RecaptchaGridEngine:
@@ -115,24 +117,24 @@ class RecaptchaGridEngine:
     async def _open_challenge(self, page, *, tries: int = 12) -> None:
         """DOM-click the anchor checkbox to open the image challenge, if needed."""
 
-        already = await page.eval_js(
-            "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+        already = await page.eval_js(with_selectors(
+            "(() => { const f = document.querySelector('__BFRAME_SEL__');"
             " return !!(f && f.contentDocument"
             " && f.contentDocument.querySelector('#rc-imageselect')); })()"
-        )
+        ))
         if already:
             return
-        await page.eval_js(
-            "(() => { const a = document.querySelector('iframe[src*=\"api2/anchor\"]');"
+        await page.eval_js(with_selectors(
+            "(() => { const a = document.querySelector('__ANCHOR_SEL__');"
             " const cb = a && a.contentDocument && a.contentDocument.querySelector('#recaptcha-anchor');"
             " if (cb) cb.click(); })()"
-        )
+        ))
         for _ in range(tries):
-            ready = await page.eval_js(
-                "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+            ready = await page.eval_js(with_selectors(
+                "(() => { const f = document.querySelector('__BFRAME_SEL__');"
                 " return !!(f && f.contentDocument"
                 " && f.contentDocument.querySelector('#rc-imageselect-target table')); })()"
-            )
+            ))
             if ready:
                 return
             await asyncio.sleep(0.5)
@@ -143,7 +145,7 @@ class RecaptchaGridEngine:
             for round_index in range(self.max_rounds):
                 state = await page.eval_js(_GRID_STATE)
                 if not isinstance(state, dict) or not state.get("ok"):
-                    return self._fail(challenge, "grid DOM unreadable (cross-origin?)")
+                    return unreadable_result(challenge, state, strategy="grid")
                 if state.get("token"):
                     return self._ok(challenge, state["token"], model_id, device)
                 if not state.get("present"):

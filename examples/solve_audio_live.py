@@ -34,11 +34,12 @@ async def main() -> int:
     async with BrowserSession(BrowserConfig(headless=True, stealth=True,
                                             extra_args=["--window-size=1365,900"])) as browser:
         page = await browser.new_page(DEMO)
+        # Build the challenge from VoidCrawl's live DOM probe (the production
+        # descriptor path) rather than hand-asserting the kind.
+        kind = await page.detect_captcha()    # -> "recaptcha"
+        challenge = Challenge.from_capture({"kind": kind or "recaptcha", "page_url": DEMO})
         async with solver.engine():           # warm Whisper once
-            result = await solver.solve(
-                Challenge.from_capture({"kind": "recaptcha", "page_url": DEMO}),
-                page=page, timeout=120,
-            )
+            result = await solver.solve(challenge, page=page, timeout=120)
 
     if result.ok:
         print(f"✓ PASSED — minted a real reCAPTCHA token ({len(result.token)} chars, "

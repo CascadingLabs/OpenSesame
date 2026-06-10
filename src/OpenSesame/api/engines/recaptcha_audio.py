@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.engines._recaptcha_dom import unreadable_result, with_selectors
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelKey, ModelRegistry
 from OpenSesame.api.result import (
@@ -36,35 +37,36 @@ DEFAULT_MODEL = "openai/whisper-base.en"
 PROVIDER_KIND = "whisper"
 
 # Open the challenge by DOM-clicking the anchor checkbox (if not already open).
-_OPEN_CHALLENGE = r"""
+_OPEN_CHALLENGE = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   if (f && f.contentDocument
       && f.contentDocument.querySelector('#recaptcha-audio-button, #rc-imageselect')) {
     return 'open';
   }
-  const a = document.querySelector('iframe[src*="api2/anchor"]');
+  const a = document.querySelector('__ANCHOR_SEL__');
   const cb = a && a.contentDocument && a.contentDocument.querySelector('#recaptcha-anchor');
   if (cb) { cb.click(); return 'clicked'; }
   return 'no-anchor';
 })()
-"""
+""")
 
 # Switch to the audio challenge.
-_CLICK_AUDIO_BUTTON = r"""
+_CLICK_AUDIO_BUTTON = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   const b = f && f.contentDocument && f.contentDocument.querySelector('#recaptcha-audio-button');
   if (b) { b.click(); return true; }
   return false;
 })()
-"""
+""")
 
 # Read the audio-challenge DOM state (signed MP3 url, rate-limit, token).
-_AUDIO_STATE = r"""
+_AUDIO_STATE = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
-  if (!f || !f.contentDocument) return {ok:false, reason:'cross-origin'};
+  const f = document.querySelector('__BFRAME_SEL__');
+  if (!f) return {ok:false, reason:'no-frame'};
+  if (!f.contentDocument) return {ok:false, reason:'cross-origin'};
   const doc = f.contentDocument;
   const dl = doc.querySelector('.rc-audiochallenge-tdownload-link');
   const src = doc.querySelector('#audio-source');
@@ -79,12 +81,12 @@ _AUDIO_STATE = r"""
     token: tok ? (tok.value || '') : '',
   };
 })()
-"""
+""")
 
 # Fill the response field at the DOM level (set value + fire input/change).
-_SET_RESPONSE = r"""
+_SET_RESPONSE = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   const el = f && f.contentDocument && f.contentDocument.querySelector('#audio-response');
   if (!el) return false;
   el.focus();
@@ -93,16 +95,16 @@ _SET_RESPONSE = r"""
   el.dispatchEvent(new Event('change', {bubbles:true}));
   return true;
 })()
-"""
+""")
 
-_CLICK_VERIFY = r"""
+_CLICK_VERIFY = with_selectors(r"""
 (() => {
-  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  const f = document.querySelector('__BFRAME_SEL__');
   const el = f && f.contentDocument && f.contentDocument.querySelector('#recaptcha-verify-button');
   if (!el) return false;
   el.click(); return true;
 })()
-"""
+""")
 
 _READ_TOKEN = (
     "document.querySelector('#g-recaptcha-response, textarea[name=\"g-recaptcha-response\"]')"
@@ -153,7 +155,7 @@ class RecaptchaAudioEngine:
             for _ in range(self.max_attempts):
                 state = await self._wait_for_audio(page)
                 if not isinstance(state, dict) or not state.get("ok"):
-                    return self._fail(challenge, "audio DOM unreadable (cross-origin?)")
+                    return unreadable_result(challenge, state, strategy="audio")
                 if state.get("rate_limited"):
                     return self._rate_limited(challenge)
                 download = state.get("download")
@@ -179,11 +181,11 @@ class RecaptchaAudioEngine:
         if await page.eval_js(_OPEN_CHALLENGE) == "open":
             return
         for _ in range(tries):  # wait for the challenge frame to render
-            ready = await page.eval_js(
-                "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+            ready = await page.eval_js(with_selectors(
+                "(() => { const f = document.querySelector('__BFRAME_SEL__');"
                 " return !!(f && f.contentDocument"
                 " && f.contentDocument.querySelector('#recaptcha-audio-button')); })()"
-            )
+            ))
             if ready:
                 return
             await asyncio.sleep(0.5)

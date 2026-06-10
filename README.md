@@ -57,6 +57,17 @@ Redis/noVNC deployment swaps behind. See
 
 v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)** and **OCR / distorted-text captchas**.
 
+**Scope & generalization.** The architecture is vendor-agnostic (`Family`→engine
+routing, the audio/grid strategy composite, the provider registry), and the
+reCAPTCHA engines cover **v2 + Enterprise** on the same-origin path. They drive the
+challenge through the bframe's `contentDocument`, so they work on Google's own
+`api2/demo` and same-origin embeds; on a real third-party site the frame is
+cross-origin and the engines return an honest `FAILED` with
+`metadata["cross_origin"] = True` (the cross-origin coordinate engine is the V2
+follow-up). v3 / hCaptcha / Turnstile are detect-and-route (`REFUSED`,
+`route: anti-bot`), not solve targets. Full write-up:
+[`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
+
 ### CLI
 
 ```bash
