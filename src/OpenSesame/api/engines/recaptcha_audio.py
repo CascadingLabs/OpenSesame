@@ -1,15 +1,20 @@
-"""reCAPTCHA v2 audio side-door — local Whisper STT, driven via the DOM.
+"""reCAPTCHA v2 audio side-door — local Whisper STT, driven via frame-scoped eval.
 
 Proven path: switch to the audio challenge, read the signed MP3 URL from the
-same-origin bframe DOM, download it, transcribe with a local model, type the
-answer, verify, harvest the token. All interaction is **DOM-level** (read the
-contentDocument, set values, click elements) — never pixel coordinates — and the
-answer is typed via VoidCrawl's input actions. Model inference is delegated to a
-registry ``Transcriber``.
+challenge frame, download it, transcribe with a local model, type the answer,
+verify, harvest the token. All frame interaction goes through
+``page.eval_js_in_frame`` (VoidCrawl 0.3.5), so the same code drives the
+challenge whether its ``bframe`` is same-origin (``api2/demo``) or **cross-origin**
+(a real third-party site) — the inner JS runs in the frame's own context, where
+``document`` is the challenge document and the signed audio URL is readable.
+Interaction stays DOM-level (read state, set the response value, click elements);
+the answer is also typed via VoidCrawl's CDP input actions. Model inference is
+delegated to a registry ``Transcriber``.
 
-NOTE: same-origin DOM access works on Google's own ``api2/demo``. On a real
-third-party site the bframe is cross-origin; that variant downloads the audio
-through the page's network context instead (future engine variant).
+Cross-origin requires the session launched with
+``extra_args=["disable-site-isolation-trials"]`` so Chrome keeps the google.com
+frames in-process; otherwise the frame is unreachable and the engine returns an
+actionable error.
 """
 
 from __future__ import annotations
@@ -22,7 +27,13 @@ from pathlib import Path
 from typing import Any
 
 from OpenSesame.api.challenge import Challenge
-from OpenSesame.api.engines._recaptcha_dom import unreadable_result, with_selectors
+from OpenSesame.api.engines._recaptcha_dom import (
+    ANCHOR_PATTERNS,
+    BFRAME_PATTERNS,
+    FrameAccess,
+    FrameUnreachable,
+    frame_unreachable_result,
+)
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelKey, ModelRegistry
 from OpenSesame.api.result import (
@@ -36,58 +47,40 @@ from OpenSesame.api.result import (
 DEFAULT_MODEL = "openai/whisper-base.en"
 PROVIDER_KIND = "whisper"
 
-# Open the challenge by DOM-clicking the anchor checkbox (if not already open).
-_OPEN_CHALLENGE = with_selectors(r"""
-(() => {
-  const f = document.querySelector('__BFRAME_SEL__');
-  if (f && f.contentDocument
-      && f.contentDocument.querySelector('#recaptcha-audio-button, #rc-imageselect')) {
-    return 'open';
-  }
-  const a = document.querySelector('__ANCHOR_SEL__');
-  const cb = a && a.contentDocument && a.contentDocument.querySelector('#recaptcha-anchor');
-  if (cb) { cb.click(); return 'clicked'; }
-  return 'no-anchor';
-})()
-""")
+# Is the challenge already open? — runs inside the bframe.
+_CHALLENGE_OPEN_FRAME = "(() => !!document.querySelector('#recaptcha-audio-button, #rc-imageselect'))()"
+_AUDIO_BUTTON_READY_FRAME = "(() => !!document.querySelector('#recaptcha-audio-button'))()"
+# Click the checkbox — runs inside the anchor frame.
+_CLICK_ANCHOR_FRAME = (
+    "(() => { const cb = document.querySelector('#recaptcha-anchor');"
+    " if (cb) { cb.click(); return true; } return false; })()"
+)
 
-# Switch to the audio challenge.
-_CLICK_AUDIO_BUTTON = with_selectors(r"""
-(() => {
-  const f = document.querySelector('__BFRAME_SEL__');
-  const b = f && f.contentDocument && f.contentDocument.querySelector('#recaptcha-audio-button');
-  if (b) { b.click(); return true; }
-  return false;
-})()
-""")
+# Switch to the audio challenge — runs inside the bframe.
+_CLICK_AUDIO_BUTTON_FRAME = (
+    "(() => { const b = document.querySelector('#recaptcha-audio-button');"
+    " if (b) { b.click(); return true; } return false; })()"
+)
 
-# Read the audio-challenge DOM state (signed MP3 url, rate-limit, token).
-_AUDIO_STATE = with_selectors(r"""
+# Audio-challenge state (signed MP3 url, rate-limit) — runs inside the bframe.
+_AUDIO_STATE_FRAME = r"""
 (() => {
-  const f = document.querySelector('__BFRAME_SEL__');
-  if (!f) return {ok:false, reason:'no-frame'};
-  if (!f.contentDocument) return {ok:false, reason:'cross-origin'};
-  const doc = f.contentDocument;
-  const dl = doc.querySelector('.rc-audiochallenge-tdownload-link');
-  const src = doc.querySelector('#audio-source');
-  const resp = doc.querySelector('#audio-response');
-  const blocked = doc.querySelector('.rc-doscaptcha-header, .rc-doscaptcha-body');
-  const tok = document.querySelector('#g-recaptcha-response, textarea[name="g-recaptcha-response"]');
+  const dl = document.querySelector('.rc-audiochallenge-tdownload-link');
+  const src = document.querySelector('#audio-source');
+  const resp = document.querySelector('#audio-response');
+  const blocked = document.querySelector('.rc-doscaptcha-header, .rc-doscaptcha-body');
   return {
-    ok: true,
     download: dl ? dl.href : (src ? src.src : null),
     has_response: !!resp,
     rate_limited: !!blocked,
-    token: tok ? (tok.value || '') : '',
   };
 })()
-""")
+"""
 
-# Fill the response field at the DOM level (set value + fire input/change).
-_SET_RESPONSE = with_selectors(r"""
+# Fill the response field (set value + fire input/change) — runs inside the bframe.
+_SET_RESPONSE_FRAME = r"""
 (() => {
-  const f = document.querySelector('__BFRAME_SEL__');
-  const el = f && f.contentDocument && f.contentDocument.querySelector('#audio-response');
+  const el = document.querySelector('#audio-response');
   if (!el) return false;
   el.focus();
   el.value = __ANSWER__;
@@ -95,20 +88,11 @@ _SET_RESPONSE = with_selectors(r"""
   el.dispatchEvent(new Event('change', {bubbles:true}));
   return true;
 })()
-""")
+"""
 
-_CLICK_VERIFY = with_selectors(r"""
-(() => {
-  const f = document.querySelector('__BFRAME_SEL__');
-  const el = f && f.contentDocument && f.contentDocument.querySelector('#recaptcha-verify-button');
-  if (!el) return false;
-  el.click(); return true;
-})()
-""")
-
-_READ_TOKEN = (
-    "document.querySelector('#g-recaptcha-response, textarea[name=\"g-recaptcha-response\"]')"
-    "?.value || ''"
+_CLICK_VERIFY_FRAME = (
+    "(() => { const el = document.querySelector('#recaptcha-verify-button');"
+    " if (!el) return false; el.click(); return true; })()"
 )
 
 
@@ -136,26 +120,32 @@ class RecaptchaAudioEngine:
     ) -> SolveResult:
         key = self.model_keys(policy)[0]
         transcriber = registry.get(key)  # load-once, cached for the process
-        return await self._solve(challenge, page, transcriber, key.model_id, policy.device)
+        return await self._solve(challenge, FrameAccess(page), page, transcriber, key.model_id, policy.device)
 
-    async def _solve(self, challenge, page, transcriber, model_id, device) -> SolveResult:
-        token = str(await page.eval_js(_READ_TOKEN) or "")
+    async def _solve(self, challenge, frames, page, transcriber, model_id, device) -> SolveResult:
+        token = await frames.token()
         if token:
             return self._ok(challenge, token, model_id, device)
 
-        await self._open_challenge(page)         # DOM-click the checkbox if needed
-        token = str(await page.eval_js(_READ_TOKEN) or "")
+        await self._open_challenge(frames)       # click the checkbox if needed
+        token = await frames.token()
         if token:                                 # checkbox auto-passed, no challenge
             return self._ok(challenge, token, model_id, device)
 
-        await page.eval_js(_CLICK_AUDIO_BUTTON)
+        try:
+            await frames.eval_frame(BFRAME_PATTERNS, _CLICK_AUDIO_BUTTON_FRAME)
+        except FrameUnreachable as exc:
+            return frame_unreachable_result(challenge, exc, strategy="audio")
         await asyncio.sleep(1.0)
 
         with tempfile.TemporaryDirectory() as tmp:
             for _ in range(self.max_attempts):
-                state = await self._wait_for_audio(page)
-                if not isinstance(state, dict) or not state.get("ok"):
-                    return unreadable_result(challenge, state, strategy="audio")
+                try:
+                    state = await self._wait_for_audio(frames)
+                except FrameUnreachable as exc:
+                    return frame_unreachable_result(challenge, exc, strategy="audio")
+                if not isinstance(state, dict):
+                    return self._fail(challenge, "audio state unreadable")
                 if state.get("rate_limited"):
                     return self._rate_limited(challenge)
                 download = state.get("download")
@@ -166,48 +156,52 @@ class RecaptchaAudioEngine:
                 await asyncio.to_thread(_download, download, mp3)
                 text = normalize_answer(await asyncio.to_thread(transcriber.transcribe, str(mp3)))
 
-                await self._set_response(page, text)
+                await self._set_response(frames, text)
                 await type_via_actions(page, text)  # VoidCrawl input action (best-effort)
-                await page.eval_js(_CLICK_VERIFY)
+                await frames.eval_frame(BFRAME_PATTERNS, _CLICK_VERIFY_FRAME)
 
-                token = await self._read_token_after(page)
+                token = await self._read_token_after(frames)
                 if token:
                     return self._ok(challenge, token, model_id, device, transcript=text)
                 await asyncio.sleep(1.0)
 
         return self._fail(challenge, "no token after audio attempts")
 
-    async def _open_challenge(self, page, *, tries: int = 12) -> None:
-        if await page.eval_js(_OPEN_CHALLENGE) == "open":
+    async def _open_challenge(self, frames: FrameAccess, *, tries: int = 12) -> None:
+        try:
+            if await frames.eval_frame(BFRAME_PATTERNS, _CHALLENGE_OPEN_FRAME):
+                return
+        except FrameUnreachable:
+            pass  # bframe may not exist until the checkbox is clicked
+        try:
+            await frames.eval_frame(ANCHOR_PATTERNS, _CLICK_ANCHOR_FRAME)
+        except FrameUnreachable:
             return
         for _ in range(tries):  # wait for the challenge frame to render
-            ready = await page.eval_js(with_selectors(
-                "(() => { const f = document.querySelector('__BFRAME_SEL__');"
-                " return !!(f && f.contentDocument"
-                " && f.contentDocument.querySelector('#recaptcha-audio-button')); })()"
-            ))
-            if ready:
-                return
+            try:
+                if await frames.eval_frame(BFRAME_PATTERNS, _AUDIO_BUTTON_READY_FRAME):
+                    return
+            except FrameUnreachable:
+                pass
             await asyncio.sleep(0.5)
 
-    async def _wait_for_audio(self, page, *, tries: int = 16) -> Any:
+    async def _wait_for_audio(self, frames: FrameAccess, *, tries: int = 16) -> Any:
+        state: Any = None
         for _ in range(tries):
-            state = await page.eval_js(_AUDIO_STATE)
-            if isinstance(state, dict) and state.get("ok") and (
-                state.get("download") or state.get("rate_limited")
-            ):
+            state = await frames.eval_frame(BFRAME_PATTERNS, _AUDIO_STATE_FRAME)
+            if isinstance(state, dict) and (state.get("download") or state.get("rate_limited")):
                 return state
             await asyncio.sleep(0.4)
-        return await page.eval_js(_AUDIO_STATE)
+        return state
 
-    async def _set_response(self, page, text: str) -> None:
+    async def _set_response(self, frames: FrameAccess, text: str) -> None:
         import json
 
-        await page.eval_js(_SET_RESPONSE.replace("__ANSWER__", json.dumps(text)))
+        await frames.eval_frame(BFRAME_PATTERNS, _SET_RESPONSE_FRAME.replace("__ANSWER__", json.dumps(text)))
 
-    async def _read_token_after(self, page, *, tries: int = 12) -> str:
+    async def _read_token_after(self, frames: FrameAccess, *, tries: int = 12) -> str:
         for _ in range(tries):
-            token = str(await page.eval_js(_READ_TOKEN) or "")
+            token = await frames.token()
             if token:
                 return token
             await asyncio.sleep(0.5)
@@ -245,8 +239,9 @@ async def type_via_actions(page: Any, text: str) -> None:
     """Type via VoidCrawl's CdpTypeText action into the focused field (best-effort).
 
     The response field was focused by the DOM set step; CdpTypeText drives real
-    CDP key events into the focused element. If voidcrawl.actions is unavailable
-    (API-only env / tests), the DOM set above already populated the value.
+    CDP key events into the focused element (renderer-wide focus, so it reaches
+    the field even inside a cross-origin frame). If voidcrawl.actions is
+    unavailable (API-only env / tests), the DOM set above already populated it.
     """
 
     try:

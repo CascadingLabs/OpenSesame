@@ -37,7 +37,8 @@ async def main() -> int:
     ))
 
     async with BrowserSession(BrowserConfig(headless=True, stealth=True,
-                                            extra_args=["--window-size=1365,900"])) as browser:
+                                            extra_args=["--window-size=1365,900",
+                                                        "disable-site-isolation-trials"])) as browser:
         page = await browser.new_page(DEMO)
         # Build the challenge from VoidCrawl's live DOM probe (the production
         # descriptor path) rather than hand-asserting the kind.

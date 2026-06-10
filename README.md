@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/c8MKEaWEEK"><img src="https://img.shields.io/badge/Discord-Join-9af5bf?labelColor=071711&logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://discord.gg/UnqRNzFYjM"><img src="https://img.shields.io/badge/Discord-Join-9af5bf?labelColor=071711&logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-9af5bf?labelColor=071711" alt="License"></a>
 </p>
 
@@ -59,13 +59,15 @@ v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)** and **OCR / distor
 
 **Scope & generalization.** The architecture is vendor-agnostic (`Family`→engine
 routing, the audio/grid strategy composite, the provider registry), and the
-reCAPTCHA engines cover **v2 + Enterprise** on the same-origin path. They drive the
-challenge through the bframe's `contentDocument`, so they work on Google's own
-`api2/demo` and same-origin embeds; on a real third-party site the frame is
-cross-origin and the engines return an honest `FAILED` with
-`metadata["cross_origin"] = True` (the cross-origin coordinate engine is the V2
-follow-up). v3 / hCaptcha / Turnstile are detect-and-route (`REFUSED`,
-`route: anti-bot`), not solve targets. Full write-up:
+reCAPTCHA engines cover **v2 + Enterprise**, both same-origin and **cross-origin**.
+They drive the challenge through VoidCrawl 0.3.5's frame-scoped eval
+(`eval_js_in_frame`), so they work on Google's own `api2/demo` **and** on real
+third-party sites where the reCAPTCHA frames are served cross-origin from
+`google.com`. Cross-origin needs the session launched with
+`extra_args=["disable-site-isolation-trials"]` (Chrome keeps the google.com frames
+in-process); without it the engine returns an actionable `FAILED` with
+`metadata["frame_isolated"] = True`. v3 / hCaptcha / Turnstile are detect-and-route
+(`REFUSED`, `route: anti-bot`), not solve targets. Full write-up:
 [`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
 
 ### CLI
@@ -96,7 +98,7 @@ PYTHONPATH=src python -m pytest      # unit tests (no browser, no models)
 
 ## Community
 
-- **Discord:** [discord.gg/c8MKEaWEEK](https://discord.gg/c8MKEaWEEK)
+- **Discord:** [discord.gg/UnqRNzFYjM](https://discord.gg/UnqRNzFYjM)
 - **Support:** see [SUPPORT.md](SUPPORT.md)
 - **Security:** see [SECURITY.md](SECURITY.md)
 - **Code of Conduct:** see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)

@@ -36,26 +36,37 @@ def test_normalize_answer_strips_punct() -> None:
 # -- audio engine end-to-end (scripted DOM) -------------------------------
 
 class FakeAudioPage:
-    """Scripts the same-origin bframe audio flow."""
+    """Scripts the audio flow over the frame-scoped eval API (origin-agnostic)."""
 
     def __init__(self) -> None:
         self.verified = False
         self.clicked_audio = False
 
     async def eval_js(self, js: str):
-        if "recaptcha-audio-button" in js:
+        # Parent-document reads: only the minted token.
+        if "g-recaptcha-response" in js:
+            return "TOK-AUDIO" if self.verified else ""
+        return None
+
+    async def eval_js_in_frame(self, pattern: str, js: str):
+        if "recaptcha-audio-button" in js and "click" in js:   # switch to audio
             self.clicked_audio = True
             return True
-        if "recaptcha-verify-button" in js:
+        if "recaptcha-verify-button" in js:                    # verify
             self.verified = True
             return True
-        if "g-recaptcha-response" in js and "rc-audiochallenge" not in js and "audio-response" not in js:
-            return "TOK-AUDIO" if self.verified else ""
-        if "rc-audiochallenge-tdownload-link" in js:
-            return {"ok": True, "download": "https://host/audio.mp3", "rate_limited": False, "token": ""}
-        if "audio-response" in js:
+        if "recaptcha-audio-button" in js:                     # open / ready probe
+            return True
+        if "rc-audiochallenge-tdownload-link" in js:           # audio state
+            return {"download": "https://host/audio.mp3", "has_response": True, "rate_limited": False}
+        if "audio-response" in js:                             # set response
+            return True
+        if "recaptcha-anchor" in js:                           # checkbox click
             return True
         return None
+
+    async def frame_urls(self):
+        return ["https://www.google.com/recaptcha/api2/bframe?k=demo"]
 
 
 class FakeTranscriber:
@@ -85,10 +96,10 @@ def test_audio_engine_solves(monkeypatch) -> None:
 
 def test_audio_engine_surfaces_rate_limit(monkeypatch) -> None:
     class RatePage(FakeAudioPage):
-        async def eval_js(self, js: str):
+        async def eval_js_in_frame(self, pattern: str, js: str):
             if "rc-audiochallenge-tdownload-link" in js:
-                return {"ok": True, "download": None, "rate_limited": True, "token": ""}
-            return await super().eval_js(js)
+                return {"download": None, "has_response": True, "rate_limited": True}
+            return await super().eval_js_in_frame(pattern, js)
 
     reg = ModelRegistry()
     reg.register_factory("whisper", lambda key: FakeTranscriber())
@@ -97,55 +108,103 @@ def test_audio_engine_surfaces_rate_limit(monkeypatch) -> None:
     assert result.status is SolveStatus.RATE_LIMITED
 
 
-# -- enterprise selectors + honest cross-origin signal --------------------
+# -- enterprise + cross-origin via frame-scoped eval (voidcrawl 0.3.5) -----
 
-def test_engines_match_enterprise_frames() -> None:
-    """v2 + Enterprise share challenge DOM; selectors must match both bframes."""
-    from OpenSesame.api.engines import recaptcha_grid
-    for js in (recaptcha_audio._AUDIO_STATE, recaptcha_grid._GRID_STATE):
-        assert 'src*="api2/bframe"' in js
-        assert 'src*="enterprise/bframe"' in js
+def test_frame_patterns_cover_v2_and_enterprise() -> None:
+    """One frame engine drives both v2 (api2) and Enterprise frames."""
+    from OpenSesame.api.engines._recaptcha_dom import ANCHOR_PATTERNS, BFRAME_PATTERNS
+    assert "api2/bframe" in BFRAME_PATTERNS and "enterprise/bframe" in BFRAME_PATTERNS
+    assert "api2/anchor" in ANCHOR_PATTERNS and "enterprise/anchor" in ANCHOR_PATTERNS
 
 
-class CrossOriginGridPage:
-    """A real third-party site: the bframe is present but cross-origin."""
+class EnterpriseGridPage:
+    """A cross-origin Enterprise widget: only the enterprise/* frame resolves."""
+
+    def __init__(self) -> None:
+        self.solved = False
 
     async def eval_js(self, js: str):
-        if "rc-imageselect-instructions" in js:        # _GRID_STATE
-            return {"ok": False, "reason": "cross-origin"}
-        if "#rc-imageselect'" in js:                   # _open_challenge "already open?" probe
-            return True                                # skip the open loop
+        if "g-recaptcha-response" in js:
+            return "ENT-TOK"            # token already minted in the parent
         return None
 
-
-class NoFrameGridPage(CrossOriginGridPage):
-    async def eval_js(self, js: str):
-        if "rc-imageselect-instructions" in js:
-            return {"ok": False, "reason": "no-frame"}
-        if "#rc-imageselect'" in js:
+    async def eval_js_in_frame(self, pattern: str, js: str):
+        if "enterprise" not in pattern:   # the api2/* pattern misses → engine tries enterprise next
+            raise RuntimeError("FrameNotFound")
+        if "rc-imageselect" in js:        # challenge-open probe
             return True
         return None
 
+    async def frame_urls(self):
+        return ["https://www.google.com/recaptcha/enterprise/bframe?k=ent"]
 
-def test_grid_cross_origin_is_honest_failure() -> None:
+
+def test_grid_drives_enterprise_cross_origin_frame() -> None:
     reg = ModelRegistry()
     reg.register_factory("tiles", lambda key: object())
     ch = Challenge(family=Family.RECAPTCHA_V2, url="https://shop.example/checkout",
                    host="shop.example", vendor_kind="recaptcha")
-    result = run(RecaptchaGridEngine().solve(ch, CrossOriginGridPage(), registry=reg, policy=POLICY))
-    assert result.status is SolveStatus.FAILED
-    assert result.metadata.get("cross_origin") is True     # machine-detectable, not vague
-    assert "coordinate engine" in result.error
+    result = run(RecaptchaGridEngine().solve(ch, EnterpriseGridPage(), registry=reg, policy=POLICY))
+    assert result.ok and result.token == "ENT-TOK"   # reached the enterprise frame
 
 
-def test_grid_no_frame_is_plain_failure_not_cross_origin() -> None:
+class NoFramePage:
+    """No reCAPTCHA frame on the page at all."""
+
+    async def eval_js(self, js: str):
+        return "" if "g-recaptcha-response" in js else None
+
+    async def eval_js_in_frame(self, pattern: str, js: str):
+        raise RuntimeError("FrameNotFound")
+
+    async def frame_urls(self):
+        return ["https://shop.example/checkout"]   # nothing recaptcha-shaped
+
+
+class IsolatedFramePage(NoFramePage):
+    """The frame exists (tracked) but is out-of-process — needs the isolation flag."""
+
+    async def frame_urls(self):
+        return ["https://www.google.com/recaptcha/api2/bframe?k=x"]
+
+
+class OldVoidcrawlPage:
+    """A VoidCrawl < 0.3.5 page: no eval_js_in_frame / frame_urls at all."""
+
+    async def eval_js(self, js: str):
+        return "" if "g-recaptcha-response" in js else None
+
+
+def _grid_failure(page) -> SolveResult:
     reg = ModelRegistry()
     reg.register_factory("tiles", lambda key: object())
-    ch = Challenge(family=Family.RECAPTCHA_V2, url="https://shop.example/checkout",
+    ch = Challenge(family=Family.RECAPTCHA_V2, url="https://shop.example/x",
                    host="shop.example", vendor_kind="recaptcha")
-    result = run(RecaptchaGridEngine().solve(ch, NoFrameGridPage(), registry=reg, policy=POLICY))
+    return run(RecaptchaGridEngine().solve(ch, page, registry=reg, policy=POLICY))
+
+
+def test_grid_absent_frame_is_plain_failure() -> None:
+    result = _grid_failure(NoFramePage())
     assert result.status is SolveStatus.FAILED
-    assert "cross_origin" not in result.metadata           # no frame at all != cross-origin
+    assert result.metadata.get("reason") == "frame_absent"
+    assert result.metadata.get("frame_isolated") is not True
+    assert "no reCAPTCHA challenge frame" in result.error
+
+
+def test_grid_isolated_frame_points_at_the_flag() -> None:
+    result = _grid_failure(IsolatedFramePage())
+    assert result.status is SolveStatus.FAILED
+    assert result.metadata.get("reason") == "frame_isolated"
+    assert result.metadata.get("frame_isolated") is True            # actionable, not vague
+    assert "disable-site-isolation-trials" in result.error
+    assert "disable-site-isolation-trials" in result.metadata["remediation"]
+
+
+def test_grid_old_voidcrawl_says_upgrade() -> None:
+    result = _grid_failure(OldVoidcrawlPage())
+    assert result.status is SolveStatus.FAILED
+    assert result.metadata.get("reason") == "voidcrawl_too_old"     # not mislabeled "absent"
+    assert "voidcrawl>=0.3.5" in result.error
 
 
 # -- OCR engine -----------------------------------------------------------
