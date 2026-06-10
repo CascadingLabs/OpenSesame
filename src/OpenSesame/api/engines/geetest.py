@@ -1,20 +1,28 @@
-"""GeeTest v3 slider — same-origin canvas gap detection + humanized drag.
+"""GeeTest v3 + v4 slider — gap detection + humanized drag, one engine.
 
-The 2Captcha GeeTest demo runs GeeTest v3 "fullpage" in the *main document* (no
-iframe): three same-origin ``<canvas>`` elements — ``geetest_canvas_fullbg``
-(complete image), ``geetest_canvas_bg`` (image with the puzzle notch), and
-``geetest_canvas_slice`` (the draggable piece). Because they are same-origin we
-read their pixels with ``getImageData`` and locate the gap by a column-wise diff
-of fullbg vs bg — no model. The piece is then dragged with a human-like
-accelerate / overshoot / settle curve via CDP mouse events.
+Both GeeTest generations render the slider in the *main document* and the
+geometry is solved the same way (find the notch, drag the piece there with a
+human-like accelerate / overshoot / settle curve); they differ only in how the
+puzzle is exposed, so the engine detects the version and routes.
 
-On success GeeTest mints the real triple (``geetest_challenge`` /
-``geetest_validate`` / ``geetest_seccode``). The geometry is fully solved here;
-GeeTest v3 additionally scores the *session* (its ``gct`` behavioural tracker and
-the encrypted ``w`` validation payload). On an automated headless session that
-behavioural layer rejects the solve (no ``ajax.php`` validation fires) — that is
-the anti-bot track (CAS-180/182's behavioural moat), not the slider solver. The
-engine reports it honestly with ``route="anti-bot"``.
+**v3 "fullpage"** uses three same-origin ``<canvas>`` elements —
+``geetest_canvas_fullbg`` (complete image), ``geetest_canvas_bg`` (with the
+notch), ``geetest_canvas_slice`` (the piece) — so the gap is a column-wise diff
+of fullbg vs bg via ``getImageData``. Success mints ``geetest_validate``.
+
+**v4** opens a popup (``.geetest_btn_click`` → ``.geetest_box``) whose background
+and piece are CSS ``background-image`` PNGs served from ``static.geetest.com``.
+There is no "full" reference, so the gap is found by edge-template-matching the
+piece silhouette against the background (images fetched over HTTP). Two v4
+specifics matter: the popup *animates into place*, so we wait for the slider
+button position to settle before reading geometry (otherwise the drag targets a
+stale, possibly off-screen point); and success is the ``geetest_success`` state
+(e.g. "1.4 s. You beat 98% of users").
+
+In both, the geometry is deterministic; GeeTest additionally scores the *session*
+behaviourally (its ``gct`` tracker), which on an automated headless session is
+intermittent — so the live examples reload-and-retry. A persistent reject is the
+anti-bot track (CAS-180/182's behavioural moat), reported with ``route``.
 """
 
 from __future__ import annotations
@@ -147,8 +155,105 @@ def human_drag_path(start_x: float, start_y: float, distance: float, *,
     return pts
 
 
+# --- v4 -------------------------------------------------------------------
+
+# v4 if the popup trigger / global init function is present (v3 has neither).
+GEETEST_VERSION_JS = (
+    "(() => (window.initGeetest4 || document.querySelector('.geetest_btn_click')) "
+    "? 'v4' : (document.querySelector('.geetest_radar_btn, .geetest_holder') ? 'v3' : 'none'))()"
+)
+GEETEST_V4_OPEN_JS = (
+    "(() => { const b = document.querySelector('.geetest_btn_click'); "
+    "if (!b) return false; b.click(); return true; })()"
+)
+# Read the puzzle geometry + image URLs from the (settled) popup.
+GEETEST_V4_GEO_JS = r"""
+(() => {
+  const url = el => { if (!el) return null;
+    const m = (getComputedStyle(el).backgroundImage || '').match(/url\(["']?([^"')]+)/); return m ? m[1] : null; };
+  const R = el => { if (!el) return null; const r = el.getBoundingClientRect();
+    return {x: r.left, y: r.top, width: r.width, height: r.height}; };
+  return {
+    bg_url: url(document.querySelector('.geetest_bg')),
+    slice_url: url(document.querySelector('.geetest_slice_bg')),
+    bg: R(document.querySelector('.geetest_bg')),
+    slice: R(document.querySelector('.geetest_slice')),
+    button: R(document.querySelector('.geetest_slider .geetest_btn')),
+  };
+})()
+"""
+# v4 outcome: success carries a "geetest_success" state; a wrong slide shows
+# "Please try again" in the result tips.
+GEETEST_V4_STATE_JS = r"""
+(() => {
+  const rt = document.querySelector('.geetest_result_tips');
+  const tips = rt ? (rt.innerText || '').trim() : '';
+  return {
+    tips: tips,
+    success: !!document.querySelector('[class*="geetest_success"]')
+             || /you beat \d+% of users|s\. you beat/i.test(tips),
+    retry: /try again/i.test(tips),
+  };
+})()
+"""
+
+
+def detect_gap_v4(bg_png: bytes, slice_png: bytes, bg_rect: dict, slice_rect: dict) -> float:
+    """Slice travel needed (displayed px) to seat the piece in the notch.
+
+    Edge-template-matches the piece silhouette (from the slice's alpha) against
+    the background's gradient along the piece's y-band. numpy/PIL are imported
+    lazily so the module loads without them.
+    """
+
+    from io import BytesIO
+
+    import numpy as np
+    from PIL import Image
+
+    bg = np.asarray(Image.open(BytesIO(bg_png)).convert("L")).astype(float)
+    sl = np.asarray(Image.open(BytesIO(slice_png)).convert("RGBA"))
+    h, w = bg.shape
+    mask = sl[:, :, 3] > 16
+    ys, xs = np.where(mask)
+    top, bot, left, right = int(ys.min()), int(ys.max()), int(xs.min()), int(xs.max())
+    pw, ph = right - left + 1, bot - top + 1
+    # Silhouette edge from the FULL slice mask (so a piece that fills its bounding
+    # box still has a boundary), then crop to the piece.
+    full = mask.astype(float)
+    fe = np.zeros_like(full)
+    fe[1:, :] += np.abs(full[1:, :] - full[:-1, :])
+    fe[:, 1:] += np.abs(full[:, 1:] - full[:, :-1])
+    pe = (fe[top:bot + 1, left:right + 1] > 0).astype(float)
+    gx = np.zeros_like(bg)
+    gy = np.zeros_like(bg)
+    gx[:, 1:-1] = bg[:, 2:] - bg[:, :-2]
+    gy[1:-1, :] = bg[2:, :] - bg[:-2, :]
+    bg_edge = np.hypot(gx, gy)
+    y0 = int(round((slice_rect["y"] - bg_rect["y"]) * h / bg_rect["height"])) + top
+    band = slice(max(0, y0), min(h, y0 + ph))
+    best_x, best = -1, -1.0
+    for x in range(left + pw, w - pw):
+        region = bg_edge[band, x:x + pw]
+        score = float((region * pe[:region.shape[0], :]).sum())
+        if score > best:
+            best, best_x = score, x
+    scale = bg_rect["width"] / w
+    return max(0.0, (best_x - left) * scale)
+
+
+async def _fetch_bytes(urls: list[str]) -> list[bytes]:
+    import httpx
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        out = []
+        for u in urls:
+            out.append((await client.get(u)).content)
+        return out
+
+
 class GeetestSlideEngine:
-    """GeeTest v3 slider: canvas-diff gap detection + humanized drag → validate."""
+    """GeeTest v3 + v4 slider: gap detection + humanized drag."""
 
     family = Family.GEETEST
 
@@ -168,6 +273,12 @@ class GeetestSlideEngine:
         policy: SolverPolicy,
         correlation_id: str | None = None,
     ) -> SolveResult:
+        version = str(await page.eval_js(GEETEST_VERSION_JS) or "")
+        if version == "v4":
+            return await self._solve_v4(challenge, page)
+        return await self._solve_v3(challenge, page)
+
+    async def _solve_v3(self, challenge: Challenge, page: Any) -> SolveResult:
         started = time.time()
         state = await page.eval_js(GEETEST_STATE_JS)
         if isinstance(state, dict) and state.get("validate"):
@@ -233,6 +344,70 @@ class GeetestSlideEngine:
                 return str(state["validate"])
             await asyncio.sleep(0.4)
         return ""
+
+    # -- v4 ---------------------------------------------------------------
+
+    async def _solve_v4(self, challenge: Challenge, page: Any) -> SolveResult:
+        started = time.time()
+        await page.eval_js(GEETEST_V4_OPEN_JS)
+        geo = await self._v4_wait_stable(page)
+        if not geo or not geo.get("bg_url") or not geo.get("button"):
+            return self._fail(challenge, "v4 puzzle did not open / no slider button", started)
+        try:
+            bg_png, slice_png = await _fetch_bytes([geo["bg_url"], geo["slice_url"]])
+            distance = detect_gap_v4(bg_png, slice_png, geo["bg"], geo["slice"])
+        except Exception as exc:
+            return self._fail(challenge, f"v4 gap detection failed: {type(exc).__name__}: {exc}", started)
+
+        btn = geo["button"]
+        bx = btn["x"] + btn["width"] / 2
+        by = btn["y"] + btn["height"] / 2
+        await self._drag(page, bx, by, distance, seed=int(started) % 97 + 1)
+
+        state = await self._poll_v4_state(page)
+        if state.get("success"):
+            return SolveResult(
+                status=SolveStatus.SOLVED, family=Family.GEETEST,
+                solution=None, solved_by=SolvedBy.LOCAL, vendor="geetest",
+                timing=Timing(started_at=started, elapsed_ms=(time.time() - started) * 1000.0),
+                metadata={"strategy": "geetest-v4-slide", "drag_css": round(distance, 1),
+                          "result": state.get("tips")},
+            )
+        return SolveResult(
+            status=SolveStatus.FAILED, family=Family.GEETEST,
+            error="v4 piece dragged to the detected gap, but GeeTest rejected the slide "
+                  f"({state.get('tips') or 'no result'}) — wrong gap or behavioural reject; retry",
+            timing=Timing(started_at=started, elapsed_ms=(time.time() - started) * 1000.0),
+            metadata={"strategy": "geetest-v4-slide", "drag_css": round(distance, 1),
+                      "route": "anti-bot", "result": state.get("tips")},
+        )
+
+    async def _v4_wait_stable(self, page: Any) -> dict[str, Any] | None:
+        """The popup animates in; wait until the slider button x stops moving."""
+
+        deadline = time.time() + self.settle_s
+        last_x: float | None = None
+        geo: dict[str, Any] | None = None
+        while time.time() < deadline:
+            geo = await page.eval_js(GEETEST_V4_GEO_JS)
+            btn = geo.get("button") if isinstance(geo, dict) else None
+            if isinstance(btn, dict) and btn.get("width", 0) > 10 and geo.get("bg_url"):
+                cur = round(btn["x"])
+                if last_x is not None and abs(cur - last_x) < 2:
+                    return geo
+                last_x = cur
+            await asyncio.sleep(0.3)
+        return geo
+
+    async def _poll_v4_state(self, page: Any) -> dict[str, Any]:
+        deadline = time.time() + self.result_wait_s
+        state: dict[str, Any] = {}
+        while time.time() < deadline:
+            state = await page.eval_js(GEETEST_V4_STATE_JS) or {}
+            if isinstance(state, dict) and (state.get("success") or state.get("retry")):
+                return state
+            await asyncio.sleep(0.4)
+        return state if isinstance(state, dict) else {}
 
     def _ok(self, validate, gap_left, drag, started) -> SolveResult:
         return SolveResult(

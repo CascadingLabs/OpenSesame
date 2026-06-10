@@ -59,3 +59,33 @@ def test_center_of_pass_window() -> None:
     assert center_of_pass_window(list(range(11, 24)), total=24) == 17
     assert center_of_pass_window([22, 23, 0, 1, 2], total=24) == 0
     assert center_of_pass_window([], total=24) is None
+
+
+def _png(img) -> bytes:
+    from io import BytesIO
+
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_detect_gap_v4_finds_synthetic_notch() -> None:
+    # A smooth background with a dark square notch at x=180; a matching opaque
+    # piece in the slice at x=10. Edge-matching should recover ~ (180-10)=170 px.
+    from PIL import Image
+
+    from OpenSesame.api.engines.geetest import detect_gap_v4
+
+    bg = Image.new("RGB", (300, 200), (200, 200, 200))
+    for x in range(180, 220):
+        for y in range(60, 120):
+            bg.putpixel((x, y), (40, 40, 40))
+    slice_img = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+    for x in range(10, 50):
+        for y in range(10, 70):
+            slice_img.putpixel((x, y), (40, 40, 40, 255))
+
+    bg_rect = {"x": 0.0, "y": 0.0, "width": 300.0, "height": 200.0}
+    slice_rect = {"x": 0.0, "y": 50.0, "width": 80.0, "height": 80.0}
+    distance = detect_gap_v4(_png(bg), _png(slice_img), bg_rect, slice_rect)
+    assert 160.0 <= distance <= 185.0
