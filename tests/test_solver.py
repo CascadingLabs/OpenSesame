@@ -74,10 +74,13 @@ def test_no_engine_is_failed_value_not_raise() -> None:
 
 @pytest.mark.parametrize(
     "family",
-    [Family.RECAPTCHA_V3, Family.HCAPTCHA, Family.TURNSTILE],
+    [Family.RECAPTCHA_V3, Family.HCAPTCHA],
 )
 def test_out_of_scope_family_is_refused_and_routed(family) -> None:
-    """v3/hCaptcha/Turnstile are detect-and-route, not a generic 'no engine' miss."""
+    """v3/hCaptcha are detect-and-route, not a generic 'no engine' miss.
+
+    (Turnstile is now a solve target — see TurnstileEngine — so it is not here.)
+    """
     solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
     ch = Challenge(family=family, url="https://www.google.com/x", host="www.google.com")
     result = run(solver.solve(ch, PAGE))

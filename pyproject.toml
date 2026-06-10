@@ -22,10 +22,11 @@ dev = [
 ]
 # Live browser driving (challenge engines). OpenSesame consumes a VoidCrawl page;
 # it never launches a browser itself. 0.3.5 adds frame-scoped JS eval
-# (`eval_js_in_frame`), which the reCAPTCHA engines need to drive the
-# cross-origin challenge frame on real third-party sites.
+# (`eval_js_in_frame`) for cross-origin reCAPTCHA; 0.3.6 adds the frame-rooted
+# AX locator (`ax_box_in_frame`) the Turnstile engine uses to reach the
+# checkbox in a closed shadow root inside the cross-origin Cloudflare frame.
 live = [
-  "voidcrawl>=0.3.5",
+  "voidcrawl>=0.3.6",
 ]
 # Local audio transcription (reCAPTCHA audio side-door).
 ml-audio = [

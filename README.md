@@ -55,7 +55,7 @@ Redis/noVNC deployment swaps behind. See
 [`examples/solve_with_api.py`](examples/solve_with_api.py) and
 [`opensesame.example.toml`](opensesame.example.toml).
 
-v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)** and **OCR / distorted-text captchas**.
+v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)**, **Cloudflare Turnstile**, and **OCR / distorted-text captchas**.
 
 **Scope & generalization.** The architecture is vendor-agnostic (`Family`→engine
 routing, the audio/grid strategy composite, the provider registry), and the
@@ -66,9 +66,13 @@ third-party sites where the reCAPTCHA frames are served cross-origin from
 `google.com`. Cross-origin needs the session launched with
 `extra_args=["disable-site-isolation-trials"]` (Chrome keeps the google.com frames
 in-process); without it the engine returns an actionable `FAILED` with
-`metadata["frame_isolated"] = True`. v3 / hCaptcha / Turnstile are detect-and-route
-(`REFUSED`, `route: anti-bot`), not solve targets. Full write-up:
-[`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
+`metadata["frame_isolated"] = True`. **Cloudflare Turnstile** is also solved: it
+has no puzzle, so OpenSesame locates the "Verify you are human" checkbox — which
+lives in a closed shadow root inside the cross-origin `challenges.cloudflare.com`
+frame — via VoidCrawl 0.3.6's accessibility locator (`ax_box_in_frame`), drives a
+humanized compositor click, and harvests `cf-turnstile-response`. reCAPTCHA v3 /
+hCaptcha remain detect-and-route (`REFUSED`, `route: anti-bot`), not solve targets.
+Full write-up: [`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
 
 ### CLI
 

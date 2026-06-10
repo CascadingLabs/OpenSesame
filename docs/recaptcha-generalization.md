@@ -120,7 +120,8 @@ value above so a batch crawl keeps per-item isolation instead of crashing.
 |---|---|---|
 | **v2 / Enterprise grid** | ✅ frame-eval DOM clicks | ✅ frame-eval DOM clicks (+ `disable-site-isolation-trials`) |
 | **v2 audio side-door** | ✅ (preferred; IP-reputation gated) | ✅ frame-eval reads the MP3 URL (+ flag; IP-reputation gated) |
-| **v3 / hCaptcha / Turnstile** | ↩️ REFUSED → anti-bot route (CAS-192) | ↩️ same |
+| **Cloudflare Turnstile** | ✅ AX-locate checkbox → humanized compositor click (VoidCrawl 0.3.6) | ✅ same (closed shadow in cross-origin frame) |
+| **reCAPTCHA v3 / hCaptcha** | ↩️ REFUSED → anti-bot route (CAS-192) | ↩️ same |
 | **OCR / distorted-text** | ✅ (no iframe) | n/a |
 
 History: the cross-origin engine + the VoidCrawl frame-eval prerequisite were

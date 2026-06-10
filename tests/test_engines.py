@@ -9,9 +9,17 @@ from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
 from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
 from OpenSesame.api.engines.recaptcha_audio import RecaptchaAudioEngine, normalize_answer
 from OpenSesame.api.engines.recaptcha_grid import RecaptchaGridEngine, parse_target
+from OpenSesame.api.engines.turnstile import TurnstileEngine
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelRegistry
-from OpenSesame.api.result import AnswerSolution, Family, SolveResult, SolveStatus, TokenSolution
+from OpenSesame.api.result import (
+    AnswerSolution,
+    Family,
+    SolvedBy,
+    SolveResult,
+    SolveStatus,
+    TokenSolution,
+)
 
 
 def run(coro):
@@ -205,6 +213,99 @@ def test_grid_old_voidcrawl_says_upgrade() -> None:
     assert result.status is SolveStatus.FAILED
     assert result.metadata.get("reason") == "voidcrawl_too_old"     # not mislabeled "absent"
     assert "voidcrawl>=0.3.5" in result.error
+
+
+# -- Cloudflare Turnstile (AX-located checkbox + humanized click) ---------
+
+class FakeTurnstilePage:
+    """Scripts the Turnstile flow: AX-locate the checkbox, click, token mints."""
+
+    def __init__(self, *, has_frame=True, checkbox_present=True,
+                 preset_token="", mint_on_click=True,
+                 interstitial=False, clears_on_click=False) -> None:
+        self.has_frame = has_frame
+        self.checkbox_present = checkbox_present
+        self._token = preset_token
+        self.mint_on_click = mint_on_click
+        self.interstitial = interstitial
+        self.clears_on_click = clears_on_click
+        self._cleared = False
+        self.clicked = False
+        self.humanized = False
+
+    async def eval_js(self, js: str):
+        if "cf-turnstile-response" in js:
+            return self._token
+        if "just a moment" in js.lower():        # _is_interstitial probe
+            return self.interstitial
+        return None
+
+    async def detect_captcha(self):
+        return None if self._cleared else "turnstile"
+
+    async def frame_urls(self):
+        present = self.has_frame and not self._cleared
+        return ["https://challenges.cloudflare.com/cdn-cgi/c/x"] if present \
+            else ["https://shop.example/checkout"]
+
+    async def click_ax_in_frame(self, frame, role, name, nth=0, humanize=False):
+        if not self.checkbox_present:
+            raise RuntimeError("FrameNotFound")
+        self.clicked = True
+        self.humanized = humanize
+        if self.mint_on_click:
+            self._token = "0.TURNSTILE.TOKEN"
+        if self.clears_on_click:
+            self._cleared = True
+
+
+def test_turnstile_clicks_checkbox_and_harvests_token() -> None:
+    page = FakeTurnstilePage()
+    ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/login",
+                   host="shop.example", vendor_kind="turnstile")
+    result = run(TurnstileEngine().solve(ch, page, registry=ModelRegistry(), policy=POLICY))
+    assert result.ok and result.token == "0.TURNSTILE.TOKEN"
+    assert result.solved_by is SolvedBy.LOCAL and result.vendor == "turnstile"
+    # The checkbox was clicked via the AX locator with humanize requested.
+    assert page.clicked and page.humanized is True
+
+
+def test_turnstile_already_passed_returns_token() -> None:
+    page = FakeTurnstilePage(preset_token="0.ALREADY.PASSED")
+    ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x", host="shop.example")
+    result = run(TurnstileEngine().solve(ch, page, registry=ModelRegistry(), policy=POLICY))
+    assert result.ok and result.token == "0.ALREADY.PASSED"
+    assert page.clicked is False     # no click needed
+
+
+def test_turnstile_full_page_challenge_clears_without_token() -> None:
+    """The full-page managed challenge has no token — success is the wall clearing."""
+    page = FakeTurnstilePage(interstitial=True, mint_on_click=False, clears_on_click=True)
+    ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x",
+                   host="shop.example", vendor_kind="turnstile")
+    result = run(TurnstileEngine().solve(ch, page, registry=ModelRegistry(), policy=POLICY))
+    assert result.ok and result.token is None       # cleared, no token to mint
+    assert result.metadata.get("cleared") is True
+    assert page.clicked                              # it did click the checkbox
+
+
+def test_turnstile_managed_challenge_not_cleared_is_honest() -> None:
+    """A reputation-blocked interstitial that never clears reports that, not 'no token'."""
+    page = FakeTurnstilePage(interstitial=True, mint_on_click=False, clears_on_click=False)
+    ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x", host="shop.example")
+    engine = TurnstileEngine(max_attempts=1)
+    result = run(engine.solve(ch, page, registry=ModelRegistry(), policy=POLICY))
+    assert result.status is SolveStatus.FAILED
+    assert result.metadata.get("reason") == "managed_challenge"
+    assert "reputation-gated" in result.error
+
+
+def test_turnstile_no_frame_is_failure() -> None:
+    page = FakeTurnstilePage(has_frame=False)
+    ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x", host="shop.example")
+    result = run(TurnstileEngine().solve(ch, page, registry=ModelRegistry(), policy=POLICY))
+    assert result.status is SolveStatus.FAILED
+    assert "no Cloudflare Turnstile frame" in result.error
 
 
 # -- OCR engine -----------------------------------------------------------
