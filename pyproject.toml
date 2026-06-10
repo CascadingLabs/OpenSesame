@@ -21,9 +21,11 @@ dev = [
   "pytest>=8.0",
 ]
 # Live browser driving (challenge engines). OpenSesame consumes a VoidCrawl page;
-# it never launches a browser itself.
+# it never launches a browser itself. 0.3.5 adds frame-scoped JS eval
+# (`eval_js_in_frame`), which the reCAPTCHA engines need to drive the
+# cross-origin challenge frame on real third-party sites.
 live = [
-  "voidcrawl>=0.3.4",
+  "voidcrawl>=0.3.5",
 ]
 # Local audio transcription (reCAPTCHA audio side-door).
 ml-audio = [
