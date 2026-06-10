@@ -265,10 +265,7 @@ class Solver:
                     await inject(solution.token)
                 applied = True   # reCAPTCHA token is already in the page from the live solve
             elif solution is not None and solution.is_answer and challenge.response_field_selector:
-                from OpenSesame.api.engines.direct_answer import fill_via_actions
-
-                await fill_via_actions(page, challenge.response_field_selector, solution.text)
-                applied = True
+                applied = await _type_answer(page, challenge.response_field_selector, solution.text)
         except Exception:
             applied = False
         return replace(result, applied=applied)
@@ -394,3 +391,26 @@ class Solver:
             timing=Timing(started_at=started, elapsed_ms=(self._clock.wall() - started) * 1000.0),
             error=error,
         )
+
+
+async def _type_answer(page: Any, selector: str, text: str) -> bool:
+    """Type an OCR answer into a form field with real CDP keystrokes.
+
+    A plain JS value-set does not trigger some forms' validation; typing via the
+    page's ``type_into`` (CDP keys) does. Falls back to a DOM value-set action.
+    """
+
+    type_into = getattr(page, "type_into", None)
+    if callable(type_into):
+        try:
+            import json
+
+            await page.eval_js(f"(()=>{{const e=document.querySelector({json.dumps(selector)});if(e)e.value='';}})()")
+            await type_into(selector, text)
+            return True
+        except Exception:
+            pass
+    from OpenSesame.api.engines.direct_answer import fill_via_actions
+
+    await fill_via_actions(page, selector, text)
+    return True

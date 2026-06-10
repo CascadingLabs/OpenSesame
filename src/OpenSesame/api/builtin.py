@@ -100,6 +100,41 @@ class ViTTileSelector:
         return picks
 
 
+class CaptchaPipelineTextReader:
+    """A captcha-trained HF OCR model (e.g. ``Graf-J/captcha-conv-transformer-base``).
+
+    These ship a custom ``captcha-recognition`` pipeline + processor via
+    ``trust_remote_code``; OpenSesame wires the processor (newer transformers
+    don't auto-attach it) so the caller just names the model.
+    """
+
+    def __init__(self, model_id: str, device: str) -> None:
+        from transformers import AutoProcessor, pipeline
+
+        # Allow "repo@revision" to pin a reproducible (and offline-cacheable) load.
+        repo, _, revision = model_id.partition("@")
+        self.model_id = model_id
+        self.device = device
+        self._pipe = pipeline(
+            task="captcha-recognition", model=repo, revision=revision or None,
+            trust_remote_code=True, device=-1,
+        )
+        if getattr(self._pipe, "processor", None) is None:
+            self._pipe.processor = AutoProcessor.from_pretrained(
+                repo, revision=revision or None, trust_remote_code=True
+            )
+
+    def read_text(self, image_path: str) -> tuple[str, float]:
+        from PIL import Image
+
+        out = self._pipe(Image.open(image_path).convert("RGB"))
+        text = ""
+        if isinstance(out, dict):
+            text = out.get("prediction") or out.get("generated_text") or out.get("text") or ""
+        text = "".join(str(text).split())
+        return text, 1.0 if text else 0.0
+
+
 class TesseractTextReader:
     """Tesseract OCR for distorted-text captchas."""
 
@@ -142,8 +177,17 @@ def register_builtin_providers(registry: Any, *, cache_dir: str = ".local/hf") -
         except Exception:
             pass
     if not registry.has_factory("ocr"):
-        # Tesseract is a system binary; register if it's on PATH.
-        from shutil import which
+        registry.register_factory("ocr", _build_ocr_reader)
 
-        if which("tesseract"):
-            registry.register_factory("ocr", lambda key: TesseractTextReader(key.model_id, key.device))
+
+def _build_ocr_reader(key: Any) -> Any:
+    """Route an OCR model id to the right reader: HF captcha model vs Tesseract."""
+
+    model_id = key.model_id or "tesseract"
+    if "/" in model_id:                       # a Hugging Face captcha-OCR model
+        return CaptchaPipelineTextReader(model_id, key.device)
+    from shutil import which
+
+    if not which("tesseract"):
+        raise LookupError("tesseract not on PATH and model_id is not an HF repo")
+    return TesseractTextReader(model_id, key.device)

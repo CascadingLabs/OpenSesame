@@ -31,9 +31,11 @@ ml-audio = [
   "transformers>=4.57",
 ]
 # Local vision/OCR inference (grid tile classification, OCR captchas).
+# torchvision is needed by some captcha-OCR models' custom processors (e.g. Graf-J).
 ml-vision = [
   "pillow>=12",
   "torch>=2.0",
+  "torchvision>=0.15",
   "transformers>=4.57",
 ]
 
