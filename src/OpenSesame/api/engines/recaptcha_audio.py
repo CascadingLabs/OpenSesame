@@ -35,6 +35,21 @@ from OpenSesame.api.result import (
 DEFAULT_MODEL = "openai/whisper-base.en"
 PROVIDER_KIND = "whisper"
 
+# Open the challenge by DOM-clicking the anchor checkbox (if not already open).
+_OPEN_CHALLENGE = r"""
+(() => {
+  const f = document.querySelector('iframe[src*="api2/bframe"]');
+  if (f && f.contentDocument
+      && f.contentDocument.querySelector('#recaptcha-audio-button, #rc-imageselect')) {
+    return 'open';
+  }
+  const a = document.querySelector('iframe[src*="api2/anchor"]');
+  const cb = a && a.contentDocument && a.contentDocument.querySelector('#recaptcha-anchor');
+  if (cb) { cb.click(); return 'clicked'; }
+  return 'no-anchor';
+})()
+"""
+
 # Switch to the audio challenge.
 _CLICK_AUDIO_BUTTON = r"""
 (() => {
@@ -126,6 +141,11 @@ class RecaptchaAudioEngine:
         if token:
             return self._ok(challenge, token, model_id, device)
 
+        await self._open_challenge(page)         # DOM-click the checkbox if needed
+        token = str(await page.eval_js(_READ_TOKEN) or "")
+        if token:                                 # checkbox auto-passed, no challenge
+            return self._ok(challenge, token, model_id, device)
+
         await page.eval_js(_CLICK_AUDIO_BUTTON)
         await asyncio.sleep(1.0)
 
@@ -154,6 +174,19 @@ class RecaptchaAudioEngine:
                 await asyncio.sleep(1.0)
 
         return self._fail(challenge, "no token after audio attempts")
+
+    async def _open_challenge(self, page, *, tries: int = 12) -> None:
+        if await page.eval_js(_OPEN_CHALLENGE) == "open":
+            return
+        for _ in range(tries):  # wait for the challenge frame to render
+            ready = await page.eval_js(
+                "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+                " return !!(f && f.contentDocument"
+                " && f.contentDocument.querySelector('#recaptcha-audio-button')); })()"
+            )
+            if ready:
+                return
+            await asyncio.sleep(0.5)
 
     async def _wait_for_audio(self, page, *, tries: int = 16) -> Any:
         for _ in range(tries):

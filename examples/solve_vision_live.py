@@ -145,7 +145,13 @@ async def main() -> int:
     work = Path(tempfile.mkdtemp(prefix="os-vision-"))
     rng = random.Random()
 
-    async with BrowserSession(BrowserConfig(headless=True, stealth=True)) as browser:
+    # file:// frames are cross-origin by default; allow same-tree access so the
+    # engine can read the bframe DOM (mirrors reCAPTCHA's same-origin demo).
+    config = BrowserConfig(
+        headless=True, stealth=True,
+        extra_args=["--allow-file-access-from-files", "--disable-web-security"],
+    )
+    async with BrowserSession(config) as browser:
         page = await browser.new_page("about:blank")
         async with solver.engine():
             for attempt in range(1, 6):
