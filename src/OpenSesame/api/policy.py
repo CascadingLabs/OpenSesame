@@ -31,7 +31,7 @@ class SiteNotAllowed(Exception):
 
 
 class SolverPolicy(BaseModel):
-    """Declarative configuration for a :class:`~open_sesame.api.solver.Solver`."""
+    """Declarative configuration for a :class:`~OpenSesame.api.solver.Solver`."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

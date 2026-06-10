@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from open_sesame.api.result import SolveResult
+from OpenSesame.api.result import SolveResult
 
 
 class AuditLog:

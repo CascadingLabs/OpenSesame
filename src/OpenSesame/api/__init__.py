@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from open_sesame.api.challenge import Challenge, WidgetRect
-from open_sesame.api.policy import SiteNotAllowed, SolverPolicy, load_policy
-from open_sesame.api.registry import ModelKey, ModelRegistry, default_registry
-from open_sesame.api.result import (
+from OpenSesame.api.challenge import Challenge, WidgetRect
+from OpenSesame.api.policy import SiteNotAllowed, SolverPolicy, load_policy
+from OpenSesame.api.registry import ModelKey, ModelRegistry, default_registry
+from OpenSesame.api.result import (
     AnswerSolution,
     Delivery,
     Family,
@@ -16,7 +16,7 @@ from open_sesame.api.result import (
     Timing,
     TokenSolution,
 )
-from open_sesame.api.solver import Solver, Ticket
+from OpenSesame.api.solver import Solver, Ticket
 
 __all__ = [
     "AnswerSolution",

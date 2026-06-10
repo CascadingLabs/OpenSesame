@@ -21,12 +21,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from open_sesame.api.audit import AuditLog
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.engines.base import Engine, ManualSolver
-from open_sesame.api.policy import SiteNotAllowed, SolverPolicy
-from open_sesame.api.registry import ModelRegistry, default_registry
-from open_sesame.api.result import (
+from OpenSesame.api.audit import AuditLog
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.engines.base import Engine, ManualSolver
+from OpenSesame.api.policy import SiteNotAllowed, SolverPolicy
+from OpenSesame.api.registry import ModelRegistry, default_registry
+from OpenSesame.api.result import (
     Family,
     SolvedBy,
     SolveResult,

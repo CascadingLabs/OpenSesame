@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.engines.base import Engine
-from open_sesame.api.engines.recaptcha_audio import RecaptchaAudioEngine
-from open_sesame.api.engines.recaptcha_grid import RecaptchaGridEngine
-from open_sesame.api.policy import SolverPolicy
-from open_sesame.api.registry import ModelRegistry
-from open_sesame.api.result import Family, SolveResult, SolveStatus
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.engines.base import Engine
+from OpenSesame.api.engines.recaptcha_audio import RecaptchaAudioEngine
+from OpenSesame.api.engines.recaptcha_grid import RecaptchaGridEngine
+from OpenSesame.api.policy import SolverPolicy
+from OpenSesame.api.registry import ModelRegistry
+from OpenSesame.api.result import Family, SolveResult, SolveStatus
 
 
 class RecaptchaV2Engine:

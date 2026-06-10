@@ -5,16 +5,16 @@ import json
 
 import pytest
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.policy import SiteNotAllowed, SolverPolicy
-from open_sesame.api.result import (
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.policy import SiteNotAllowed, SolverPolicy
+from OpenSesame.api.result import (
     Family,
     SolvedBy,
     SolveResult,
     SolveStatus,
     TokenSolution,
 )
-from open_sesame.api.solver import Solver
+from OpenSesame.api.solver import Solver
 
 PAGE = object()  # engines are faked; the page is opaque here
 

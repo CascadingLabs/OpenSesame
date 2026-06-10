@@ -2,7 +2,7 @@
 
 Public API:
 
-    from open_sesame import Solver, SolverPolicy, Challenge
+    from OpenSesame import Solver, SolverPolicy, Challenge
 
     solver = Solver(policy=SolverPolicy.auto_only(allow_sites=["www.google.com"]))
     async with solver.engine():
@@ -13,7 +13,7 @@ Public API:
 
 from __future__ import annotations
 
-from open_sesame.api import (
+from OpenSesame.api import (
     AnswerSolution,
     Challenge,
     Delivery,

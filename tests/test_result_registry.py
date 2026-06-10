@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from open_sesame.api.registry import ModelKey, ModelRegistry
-from open_sesame.api.result import (
+from OpenSesame.api.registry import ModelKey, ModelRegistry
+from OpenSesame.api.result import (
     AnswerSolution,
     Delivery,
     Family,

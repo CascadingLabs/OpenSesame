@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from open_sesame.api.engines.direct_answer import DirectAnswerEngine
-from open_sesame.api.engines.recaptcha import RecaptchaV2Engine
-from open_sesame.api.policy import SolverPolicy
-from open_sesame.api.registry import ModelRegistry, default_registry
-from open_sesame.api.result import Family
-from open_sesame.api.solver import Solver
+from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
+from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
+from OpenSesame.api.policy import SolverPolicy
+from OpenSesame.api.registry import ModelRegistry, default_registry
+from OpenSesame.api.result import Family
+from OpenSesame.api.solver import Solver
 
 
 def register_default_engines(solver: Solver) -> None:
@@ -47,7 +47,7 @@ def _try_register_whisper(reg: ModelRegistry) -> None:
     if reg.has_factory("whisper"):
         return
     try:
-        from open_sesame.solvers.whisper_provider import build_transcriber  # type: ignore
+        from OpenSesame.solvers.whisper_provider import build_transcriber  # type: ignore
     except Exception:
         return
     reg.register_factory("whisper", lambda key: build_transcriber(key.model_id, key.device))
@@ -57,7 +57,7 @@ def _try_register_tiles(reg: ModelRegistry) -> None:
     if reg.has_factory("tiles"):
         return
     try:
-        from open_sesame.solvers.tile_provider import build_tile_selector  # type: ignore
+        from OpenSesame.solvers.tile_provider import build_tile_selector  # type: ignore
     except Exception:
         return
     reg.register_factory("tiles", lambda key: build_tile_selector(key.model_id, key.device))
@@ -67,7 +67,7 @@ def _try_register_ocr(reg: ModelRegistry) -> None:
     if reg.has_factory("ocr"):
         return
     try:
-        from open_sesame.solvers.ocr_provider import build_text_reader  # type: ignore
+        from OpenSesame.solvers.ocr_provider import build_text_reader  # type: ignore
     except Exception:
         return
     reg.register_factory("ocr", lambda key: build_text_reader(key.model_id, key.device))

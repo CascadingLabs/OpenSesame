@@ -38,10 +38,10 @@ ml-vision = [
 ]
 
 [project.scripts]
-opensesame = "open_sesame.cli:main"
+opensesame = "OpenSesame.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/open_sesame"]
+packages = ["src/OpenSesame"]

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
-from open_sesame.api.result import Family
+from OpenSesame.api.result import Family
 
 
 # Map VoidCrawl's CaptchaKind tag -> our Family. Sub-variants (v2 vs invisible,

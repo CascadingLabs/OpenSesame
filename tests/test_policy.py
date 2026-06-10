@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from open_sesame.api.policy import SolverPolicy, load_policy
+from OpenSesame.api.policy import SolverPolicy, load_policy
 
 
 def test_extra_forbid_rejects_typoed_key() -> None:

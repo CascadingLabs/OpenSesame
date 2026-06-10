@@ -3,15 +3,15 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.engines import recaptcha_audio
-from open_sesame.api.engines.direct_answer import DirectAnswerEngine
-from open_sesame.api.engines.recaptcha import RecaptchaV2Engine
-from open_sesame.api.engines.recaptcha_audio import RecaptchaAudioEngine, normalize_answer
-from open_sesame.api.engines.recaptcha_grid import parse_target
-from open_sesame.api.policy import SolverPolicy
-from open_sesame.api.registry import ModelRegistry
-from open_sesame.api.result import AnswerSolution, Family, SolveResult, SolveStatus, TokenSolution
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.engines import recaptcha_audio
+from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
+from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
+from OpenSesame.api.engines.recaptcha_audio import RecaptchaAudioEngine, normalize_answer
+from OpenSesame.api.engines.recaptcha_grid import parse_target
+from OpenSesame.api.policy import SolverPolicy
+from OpenSesame.api.registry import ModelRegistry
+from OpenSesame.api.result import AnswerSolution, Family, SolveResult, SolveStatus, TokenSolution
 
 
 def run(coro):

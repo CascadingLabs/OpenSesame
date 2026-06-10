@@ -4,12 +4,12 @@ import asyncio
 
 from click.testing import CliRunner
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.defaults import default_solver
-from open_sesame.api.manual import CallbackManualSolver
-from open_sesame.api.policy import SolverPolicy
-from open_sesame.api.result import Family, SolvedBy, SolveResult, SolveStatus, TokenSolution
-from open_sesame.cli import cli
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.defaults import default_solver
+from OpenSesame.api.manual import CallbackManualSolver
+from OpenSesame.api.policy import SolverPolicy
+from OpenSesame.api.result import Family, SolvedBy, SolveResult, SolveStatus, TokenSolution
+from OpenSesame.cli import cli
 
 
 def run(coro):

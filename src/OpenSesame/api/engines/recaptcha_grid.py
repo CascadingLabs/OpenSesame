@@ -16,10 +16,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.policy import SolverPolicy
-from open_sesame.api.registry import ModelKey, ModelRegistry
-from open_sesame.api.result import (
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.policy import SolverPolicy
+from OpenSesame.api.registry import ModelKey, ModelRegistry
+from OpenSesame.api.result import (
     Family,
     SolvedBy,
     SolveResult,

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Any, Awaitable, Callable
 
-from open_sesame.api.challenge import Challenge
-from open_sesame.api.result import SolveResult
+from OpenSesame.api.challenge import Challenge
+from OpenSesame.api.result import SolveResult
 
 ManualCallback = Callable[[Challenge, Any, float, "str | None"], Awaitable[SolveResult]]
 

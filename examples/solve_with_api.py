@@ -13,16 +13,16 @@ from __future__ import annotations
 
 import asyncio
 
-from open_sesame import Challenge, SolverPolicy
-from open_sesame.api.defaults import default_solver
-from open_sesame.api.registry import ModelKey
+from OpenSesame import Challenge, SolverPolicy
+from OpenSesame.api.defaults import default_solver
+from OpenSesame.api.registry import ModelKey
 
 
 async def main() -> None:
     from voidcrawl import BrowserConfig, BrowserSession  # provided by the `live` extra
 
     policy = SolverPolicy.auto_only(
-        allow_sites=["www.google.com"],      # default-deny: only these hosts are solved
+        allow_sites=["www.google.com"],  # default-deny: only these hosts are solved
         device="auto",
         models={"recaptcha_v2_audio": "openai/whisper-base.en"},
     )
@@ -36,13 +36,18 @@ async def main() -> None:
         challenge = Challenge.from_capture(captcha_info)
 
         # 2) Warm the model once, then solve (failure is a value, not an exception).
-        async with solver.engine(warmup=[ModelKey("whisper", "openai/whisper-base.en", "auto")]):
+        # produces a singleton for needed solves
+        async with solver.engine(
+            warmup=[ModelKey("whisper", "openai/whisper-base.en", "auto")]
+        ):
             result = await solver.solve(challenge, page=page)
 
         # 3) Consume the solution. Token-grant -> inject; answer -> type.
         if result.ok and result.solution.is_token:
             await page.inject_captcha_token(result.token)
-            print(f"solved by {result.solved_by.value} in {result.timing.elapsed_ms:.0f}ms")
+            print(
+                f"solved by {result.solved_by.value} in {result.timing.elapsed_ms:.0f}ms"
+            )
         else:
             print(f"not solved: status={result.status.value} error={result.error!r}")
 

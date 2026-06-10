@@ -16,10 +16,10 @@ import sys
 
 import rich_click as click
 
-from open_sesame.api.defaults import default_solver, install_default_providers
-from open_sesame.api.policy import SolverPolicy, load_policy
-from open_sesame.api.registry import default_registry
-from open_sesame.api.result import Family
+from OpenSesame.api.defaults import default_solver, install_default_providers
+from OpenSesame.api.policy import SolverPolicy, load_policy
+from OpenSesame.api.registry import default_registry
+from OpenSesame.api.result import Family
 
 # Sensible default model per use case (override with --model).
 _KIND_DEFAULTS = {
