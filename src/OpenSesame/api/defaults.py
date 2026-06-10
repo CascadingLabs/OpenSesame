@@ -14,7 +14,10 @@ from typing import Any
 
 from OpenSesame.api.builtin import register_builtin_providers
 from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
+from OpenSesame.api.engines.geetest import GeetestSlideEngine
+from OpenSesame.api.engines.mtcaptcha import MtcaptchaEngine
 from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
+from OpenSesame.api.engines.rotate import RotateEngine
 from OpenSesame.api.engines.turnstile import TurnstileEngine
 from OpenSesame.api.policy import SolverPolicy
 from OpenSesame.api.registry import ModelRegistry, default_registry
@@ -28,6 +31,9 @@ def register_default_engines(solver: Solver) -> None:
     solver.register_engine(Family.RECAPTCHA_V2_INVISIBLE, recaptcha)
     solver.register_engine(Family.OCR, DirectAnswerEngine())
     solver.register_engine(Family.TURNSTILE, TurnstileEngine())
+    solver.register_engine(Family.MTCAPTCHA, MtcaptchaEngine())
+    solver.register_engine(Family.GEETEST, GeetestSlideEngine())
+    solver.register_engine(Family.ROTATE, RotateEngine())
 
 
 def install_default_providers(registry: ModelRegistry | None = None) -> ModelRegistry:
