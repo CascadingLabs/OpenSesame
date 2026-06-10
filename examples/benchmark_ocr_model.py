@@ -17,7 +17,7 @@ from open_sesame.solvers.local_ml import LocalMLCaptchaOCRSolver
 from open_sesame.solvers.ml_config import (
     LocalOCRConfig,
     RUNNABLE_MODEL_OPTIONS,
-    resolve_torch_device,
+    resolve_torch_device_info,
 )
 
 
@@ -55,8 +55,8 @@ def main() -> None:
         allow_remote_code=args.allow_remote_code,
     )
     solver = LocalMLCaptchaOCRSolver(config)
-    resolved_device, _ = resolve_torch_device(args.device)
-    include_gpu = resolved_device != "cpu"
+    requested_device_info = resolve_torch_device_info(args.device)
+    include_gpu = requested_device_info.uses_gpu
 
     with ResourceSampler(include_gpu=include_gpu) as sampler:
         load_started = time.perf_counter()
@@ -97,6 +97,7 @@ def main() -> None:
         "model": args.model,
         "repo_id": solver.option.repo_id,
         "device": last_result.metadata["device"],
+        "device_info": last_result.metadata.get("device_info", requested_device_info.as_dict()),
         "image": str(args.image),
         "answer": last_result.best.text if last_result.best else "",
         "confidence": last_result.best.confidence if last_result.best else 0.0,
@@ -113,6 +114,10 @@ def main() -> None:
         print(f"model={output['model']}")
         print(f"repo_id={output['repo_id']}")
         print(f"device={output['device']}")
+        device_info = output["device_info"]
+        if isinstance(device_info, dict):
+            print(f"accelerator={device_info.get('accelerator')}")
+            print(f"device_name={device_info.get('device_name')}")
         print(f"answer={output['answer']}")
         print(f"confidence={output['confidence']:.3f}")
         for key, value in output["benchmark"].items():

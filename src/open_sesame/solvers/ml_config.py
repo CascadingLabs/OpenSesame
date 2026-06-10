@@ -38,6 +38,38 @@ class LocalOCRConfig:
     min_confidence: float = 0.0
 
 
+@dataclass(frozen=True)
+class TorchDeviceInfo:
+    """Resolved torch device details for local ML workloads."""
+
+    torch_device: str
+    pipeline_device: int
+    accelerator: str
+    torch_version: str | None = None
+    hip_version: str | None = None
+    cuda_version: str | None = None
+    device_name: str | None = None
+
+    @property
+    def uses_gpu(self) -> bool:
+        return self.pipeline_device >= 0
+
+    @property
+    def is_rocm(self) -> bool:
+        return self.accelerator == "rocm"
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "torch_device": self.torch_device,
+            "pipeline_device": self.pipeline_device,
+            "accelerator": self.accelerator,
+            "torch_version": self.torch_version,
+            "hip_version": self.hip_version,
+            "cuda_version": self.cuda_version,
+            "device_name": self.device_name,
+        }
+
+
 MODEL_OPTIONS: dict[str, CaptchaOCRModelOption] = {
     "grafj-conv-transformer-base": CaptchaOCRModelOption(
         id="grafj-conv-transformer-base",
@@ -95,23 +127,102 @@ def get_model_option(model_id: str) -> CaptchaOCRModelOption:
         raise ValueError(msg) from exc
 
 
-def resolve_torch_device(device: str) -> tuple[str, int]:
-    """Resolve a user device string to torch and pipeline device values."""
+def resolve_torch_device_info(device: str) -> TorchDeviceInfo:
+    """Resolve a user device string to torch and HF pipeline device values.
+
+    ROCm PyTorch exposes AMD GPUs through the ``torch.cuda`` API. That means a
+    ROCm install should still resolve to ``cuda:0`` for model placement, with
+    ``accelerator='rocm'`` recorded for diagnostics.
+    """
 
     if device == "cpu":
-        return "cpu", -1
+        return TorchDeviceInfo(torch_device="cpu", pipeline_device=-1, accelerator="cpu")
     if device.startswith("cuda"):
         index = 0
         if ":" in device:
             index = int(device.split(":", 1)[1])
-        return device, index
+        torch = _import_torch()
+        return TorchDeviceInfo(
+            torch_device=device,
+            pipeline_device=index,
+            accelerator=_torch_accelerator(torch),
+            torch_version=_torch_attr(torch, "__version__"),
+            hip_version=_torch_version_attr(torch, "hip"),
+            cuda_version=_torch_version_attr(torch, "cuda"),
+            device_name=_torch_device_name(torch, index),
+        )
     if device == "auto":
-        try:
-            import torch
-        except Exception:
-            return "cpu", -1
+        torch = _import_torch()
+        if torch is None:
+            return TorchDeviceInfo(torch_device="cpu", pipeline_device=-1, accelerator="cpu")
         if torch.cuda.is_available():
-            return "cuda:0", 0
-        return "cpu", -1
+            return TorchDeviceInfo(
+                torch_device="cuda:0",
+                pipeline_device=0,
+                accelerator=_torch_accelerator(torch),
+                torch_version=_torch_attr(torch, "__version__"),
+                hip_version=_torch_version_attr(torch, "hip"),
+                cuda_version=_torch_version_attr(torch, "cuda"),
+                device_name=_torch_device_name(torch, 0),
+            )
+        return TorchDeviceInfo(
+            torch_device="cpu",
+            pipeline_device=-1,
+            accelerator="cpu",
+            torch_version=_torch_attr(torch, "__version__"),
+            hip_version=_torch_version_attr(torch, "hip"),
+            cuda_version=_torch_version_attr(torch, "cuda"),
+        )
     msg = "device must be 'auto', 'cpu', or a cuda device like 'cuda:0'"
     raise ValueError(msg)
+
+
+def resolve_torch_device(device: str) -> tuple[str, int]:
+    """Resolve a user device string to torch and pipeline device values."""
+
+    info = resolve_torch_device_info(device)
+    return info.torch_device, info.pipeline_device
+
+
+def _import_torch() -> object | None:
+    try:
+        import torch
+    except Exception:
+        return None
+    return torch
+
+
+def _torch_accelerator(torch: object | None) -> str:
+    if torch is None:
+        return "cuda"
+    if _torch_version_attr(torch, "hip"):
+        return "rocm"
+    if _torch_version_attr(torch, "cuda"):
+        return "cuda"
+    return "cuda"
+
+
+def _torch_attr(torch: object | None, name: str) -> str | None:
+    if torch is None:
+        return None
+    value = getattr(torch, name, None)
+    return str(value) if value is not None else None
+
+
+def _torch_version_attr(torch: object | None, name: str) -> str | None:
+    version = getattr(torch, "version", None) if torch is not None else None
+    value = getattr(version, name, None)
+    return str(value) if value else None
+
+
+def _torch_device_name(torch: object | None, index: int) -> str | None:
+    if torch is None:
+        return None
+    cuda = getattr(torch, "cuda", None)
+    get_device_name = getattr(cuda, "get_device_name", None)
+    if get_device_name is None:
+        return None
+    try:
+        return str(get_device_name(index))
+    except Exception:
+        return None

@@ -11,6 +11,7 @@ from open_sesame.solvers.ml_config import (
     LocalOCRConfig,
     get_model_option,
     resolve_torch_device,
+    resolve_torch_device_info,
 )
 from open_sesame.solvers.ocr import normalize_ocr_text
 
@@ -90,7 +91,7 @@ class LocalMLCaptchaOCRSolver:
         else:
             candidates = ()
 
-        torch_device, _ = resolve_torch_device(self.config.device)
+        device_info = resolve_torch_device_info(self.config.device)
         return SolveResult(
             kind="answer",
             solver=self.solver_name,
@@ -99,7 +100,8 @@ class LocalMLCaptchaOCRSolver:
                 "model_id": self.option.id,
                 "repo_id": self.option.repo_id,
                 "backend": self.option.backend,
-                "device": torch_device,
+                "device": device_info.torch_device,
+                "device_info": device_info.as_dict(),
                 "raw_prediction": raw,
             },
         )

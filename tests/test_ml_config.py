@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from types import SimpleNamespace
+
 import pytest
 
 from open_sesame.solvers.local_ml import LocalMLCaptchaOCRSolver, _extract_prediction
@@ -8,6 +11,7 @@ from open_sesame.solvers.ml_config import (
     MODEL_OPTIONS,
     RUNNABLE_MODEL_OPTIONS,
     get_model_option,
+    resolve_torch_device_info,
     resolve_torch_device,
 )
 
@@ -36,6 +40,43 @@ def test_unknown_model_option_lists_available_options() -> None:
 
 def test_resolve_torch_device_accepts_cpu() -> None:
     assert resolve_torch_device("cpu") == ("cpu", -1)
+
+
+def test_resolve_torch_device_auto_detects_rocm(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_torch = SimpleNamespace(
+        __version__="2.9.1+rocm7.2",
+        version=SimpleNamespace(hip="7.2.0", cuda=None),
+        cuda=SimpleNamespace(
+            is_available=lambda: True,
+            get_device_name=lambda index: f"AMD Radeon {index}",
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    info = resolve_torch_device_info("auto")
+
+    assert resolve_torch_device("auto") == ("cuda:0", 0)
+    assert info.torch_device == "cuda:0"
+    assert info.pipeline_device == 0
+    assert info.accelerator == "rocm"
+    assert info.hip_version == "7.2.0"
+    assert info.device_name == "AMD Radeon 0"
+
+
+def test_resolve_torch_device_auto_falls_back_to_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_torch = SimpleNamespace(
+        __version__="2.9.1+cu128",
+        version=SimpleNamespace(hip=None, cuda="12.8"),
+        cuda=SimpleNamespace(is_available=lambda: False),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+
+    info = resolve_torch_device_info("auto")
+
+    assert info.torch_device == "cpu"
+    assert info.pipeline_device == -1
+    assert info.accelerator == "cpu"
+    assert info.cuda_version == "12.8"
 
 
 def test_extract_prediction_accepts_pipeline_prediction_shape() -> None:

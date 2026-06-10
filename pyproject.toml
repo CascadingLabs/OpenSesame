@@ -21,11 +21,45 @@ dev = [
 live = [
   "voidcrawl>=0.3.4",
 ]
+ml-base = [
+  "huggingface-hub>=0.36",
+  "pillow>=12",
+  "psutil>=7.0",
+  "transformers>=4.57",
+]
+ml-audio = [
+  "huggingface-hub>=0.36",
+  "psutil>=7.0",
+  "torch>=2.0",
+  "transformers>=4.57",
+]
 ml = [
   "huggingface-hub>=0.36",
   "pillow>=12",
   "psutil>=7.0",
   "torch>=2.0",
+  "transformers>=4.57",
+]
+# Offline tile-classifier evaluation against labeled reCAPTCHA datasets
+# (examples/eval_recaptcha_tiles.py). Pairs with an `ml`/`ml-rocm` venv.
+ml-eval = [
+  "datasets>=3.0",
+]
+# CUDA and ROCm use the same PyPI package name (`torch`), but require different
+# wheel indexes or system packages. Use these extras with an explicit PyTorch
+# index, or install `ml-base` into a venv that can see a system ROCm PyTorch.
+ml-cuda = [
+  "huggingface-hub>=0.36",
+  "pillow>=12",
+  "psutil>=7.0",
+  "torch>=2.11",
+  "transformers>=4.57",
+]
+ml-rocm = [
+  "huggingface-hub>=0.36",
+  "pillow>=12",
+  "psutil>=7.0",
+  "torch>=2.11",
   "transformers>=4.57",
 ]
 

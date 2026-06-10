@@ -151,6 +151,7 @@ async def crawl_gauntlet_voidcrawl_profile(
     profile_dir: str | Path,
     max_pages: int = 10,
     timeout: float = 30.0,
+    clearance_timeout: float = 45.0,
     headful: bool = True,
     chrome_executable: str | None = None,
     screenshot_dir: str | Path | None = None,
@@ -220,6 +221,7 @@ async def crawl_gauntlet_voidcrawl_profile(
                 page,
                 url,
                 timeout=timeout,
+                clearance_timeout=clearance_timeout,
                 profile_dir=profile_path,
                 headful=headful,
                 screenshot_path=screenshot_path,
@@ -241,6 +243,7 @@ async def probe_voidcrawl_profile_page(
     url: str,
     *,
     timeout: float,
+    clearance_timeout: float,
     profile_dir: Path,
     headful: bool,
     screenshot_path: Path | None = None,
@@ -250,9 +253,13 @@ async def probe_voidcrawl_profile_page(
     started = time.perf_counter()
     try:
         response = await page.goto(url, timeout=timeout, capture_endpoints=True)
-        await asyncio.sleep(0.5)
+        clearance = await wait_for_voidcrawl_clearance(
+            page,
+            timeout=clearance_timeout,
+            click_challenge=headful,
+        )
         elapsed_ms = (time.perf_counter() - started) * 1000
-        html = response.html or await page.content()
+        html = await page.content()
         final_url = str(getattr(response, "url", None) or await page.url() or url)
         title = await page.title() or extract_title(html)
         captcha_kind = await _maybe_call(page, "detect_captcha")
@@ -269,6 +276,7 @@ async def probe_voidcrawl_profile_page(
             "profile_dir": str(profile_dir),
             "headful": headful,
             "screenshot_path": str(screenshot_path) if screenshot_path is not None else None,
+            **clearance,
             **turnstile,
         }
         return GauntletPageResult(
@@ -294,6 +302,118 @@ async def probe_voidcrawl_profile_page(
             error=f"{type(exc).__name__}: {exc}",
             metadata={"profile_dir": str(profile_dir), "headful": headful},
         )
+
+
+async def wait_for_voidcrawl_clearance(
+    page: object,
+    *,
+    timeout: float,
+    click_challenge: bool = False,
+) -> dict[str, object]:
+    """Wait for a managed challenge to leave the Cloudflare verifier page."""
+
+    started = time.perf_counter()
+    interval = 1.0
+    last_state: dict[str, object] = {}
+    iterations = 0
+    click_count = 0
+    last_click_elapsed = -999.0
+    while True:
+        iterations += 1
+        raw_state = await _maybe_eval_js(
+            page,
+            """
+            (() => {
+              const token = document.querySelector('input[name="cf-turnstile-response"], textarea[name="cf-turnstile-response"]');
+              const iframe = document.querySelector('iframe[src*="challenges.cloudflare.com"]');
+              let target = iframe;
+              if (!target && token) {
+                let node = token.parentElement;
+                while (node && node !== document.body) {
+                  const candidate = node.getBoundingClientRect();
+                  if (candidate.width >= 100 && candidate.height >= 40) {
+                    target = node;
+                    break;
+                  }
+                  node = node.parentElement;
+                }
+              }
+              const rect = target?.getBoundingClientRect();
+              const title = document.title || "";
+              const text = document.body?.innerText || "";
+              return {
+                title,
+                url: location.href,
+                token_present: !!token,
+                token_length: token?.value?.length || 0,
+                cookie: document.cookie || "",
+                challenge_text: /Performing security verification|Just a moment/i.test(text),
+                iframe_rect: rect ? {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height
+                } : null
+              };
+            })()
+            """,
+        )
+        last_state = raw_state if isinstance(raw_state, dict) else {}
+        title = str(last_state.get("title") or "").lower()
+        token_present = bool(last_state.get("token_present"))
+        token_length = int(last_state.get("token_length") or 0)
+        challenge_text = bool(last_state.get("challenge_text"))
+        cookie = str(last_state.get("cookie") or "")
+        elapsed = time.perf_counter() - started
+
+        if "cf_clearance=" in cookie:
+            break
+        if title not in {"just a moment...", "attention required! | cloudflare"} and not challenge_text:
+            break
+        if token_present and token_length > 0:
+            break
+        if elapsed >= timeout:
+            break
+        iframe_rect = last_state.get("iframe_rect")
+        if (
+            click_challenge
+            and isinstance(iframe_rect, dict)
+            and click_count < 3
+            and elapsed - last_click_elapsed >= 5.0
+        ):
+            clicked = await click_turnstile_iframe_checkbox(page, iframe_rect)
+            if clicked:
+                click_count += 1
+                last_click_elapsed = elapsed
+        await asyncio.sleep(min(interval, timeout - elapsed))
+
+    return {
+        "clearance_elapsed_ms": (time.perf_counter() - started) * 1000,
+        "clearance_iterations": iterations,
+        "clearance_title": last_state.get("title"),
+        "clearance_url": last_state.get("url"),
+        "clearance_cookie_present": "cf_clearance=" in str(last_state.get("cookie") or ""),
+        "clearance_token_length": int(last_state.get("token_length") or 0),
+        "clearance_clicks": click_count,
+    }
+
+
+async def click_turnstile_iframe_checkbox(page: object, iframe_rect: dict[str, object]) -> bool:
+    """Click the visible Turnstile checkbox inside its iframe bounds."""
+
+    try:
+        x = float(iframe_rect["x"]) + min(22.0, float(iframe_rect["width"]) / 2)
+        y = float(iframe_rect["y"]) + (float(iframe_rect["height"]) / 2)
+    except (KeyError, TypeError, ValueError):
+        return False
+    try:
+        await page.dispatch_mouse_event("mouseMoved", x, y, button="none")
+        await page.dispatch_mouse_event("mousePressed", x, y, button="left", click_count=1)
+        await asyncio.sleep(0.08)
+        await page.dispatch_mouse_event("mouseReleased", x, y, button="left", click_count=1)
+        return True
+    except Exception:
+        return False
 
 
 async def extract_turnstile_state(page: object, html: str) -> dict[str, object]:

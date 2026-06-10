@@ -30,6 +30,7 @@ def main() -> None:
     parser.add_argument("--yosoi-path", type=Path, default=Path("../Yosoi"))
     parser.add_argument("--profile-dir", type=Path, default=Path(".local/fortress-profile"))
     parser.add_argument("--attempts", type=int, default=1)
+    parser.add_argument("--clearance-timeout", type=float, default=45.0)
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--chrome-executable")
     parser.add_argument("--screenshot-dir", type=Path)
@@ -49,6 +50,7 @@ def main() -> None:
                     profile_dir=args.profile_dir,
                     max_pages=args.max_pages,
                     timeout=args.timeout,
+                    clearance_timeout=args.clearance_timeout,
                     headful=not args.headless,
                     chrome_executable=args.chrome_executable,
                     screenshot_dir=args.screenshot_dir,
