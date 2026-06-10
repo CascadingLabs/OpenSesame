@@ -1,0 +1,26 @@
+# Example OpenSesame policy. Copy to opensesame.toml and edit.
+# `opensesame check --policy opensesame.toml` validates it (extra keys fail loud).
+
+# Responsible-use: default-deny. Only these hosts are ever solved.
+allow_sites = ["www.google.com"]
+
+# Timeout regimes (seconds). Auto = local models; manual = human takeover;
+# queue = max wait to enter the bounded worker pool.
+auto_timeout_s = 30.0
+manual_timeout_s = 300.0
+queue_timeout_s = 10.0
+
+device = "auto"               # "cpu", "cuda:0", "auto"
+min_confidence = 0.0          # below this, an auto solve is FAILED (and may escalate)
+escalate_on_fail = false      # auto failure -> human-in-the-loop (needs a manual solver)
+rate_limit_per_host_s = 0.0   # min seconds between solves to one host (0 = off)
+
+audit_log = ".local/opensesame-audit.jsonl"   # provenance jsonl; "" / omit to disable
+policy_id = "default"
+
+# Per-use-case model overrides (opaque ids; resolved by the model registry).
+[models]
+recaptcha_v2_audio = "openai/whisper-base.en"
+recaptcha_v2_grid = "verytuffcat/recaptcha"
+ocr = "anuashok/ocr-captcha-v3"
+# recaptcha_v2_strategy = "audio"   # pin a single strategy: "audio" or "grid"

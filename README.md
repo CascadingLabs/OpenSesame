@@ -19,11 +19,49 @@ Self-hosted captcha/token-solving microservice with no paid solver APIs.
 
 ## Usage
 
-<!-- Quickstart: the one or two commands someone copy-pastes to try it. -->
+OpenSesame is the **solver**, not the browser. [VoidCrawl](https://github.com/CascadingLabs/VoidCrawl)
+detects the wall and hands over a descriptor; OpenSesame classifies it, solves it
+with **local models** (DOM-driven, no point-and-click), and returns a token or
+answer; VoidCrawl injects it.
+
+```python
+from open_sesame import Challenge, SolverPolicy
+from open_sesame.api.defaults import default_solver
+
+# Policy is data. allow_sites is default-deny (empty = solve nothing).
+solver = default_solver(SolverPolicy.auto_only(allow_sites=["www.google.com"]))
+
+captcha = await page.capture_captcha()             # VoidCrawl descriptor
+result = await solver.solve(Challenge.from_capture(captcha), page=page)
+
+if result.ok and result.solution.is_token:
+    await page.inject_captcha_token(result.token)  # VoidCrawl injects
+```
+
+Failure is a value (`result.status`), never an exception — except a denied site
+(`SiteNotAllowed`). The async ticket API (`submit` → `await_result`) is the same
+seam a future Redis/noVNC deployment swaps behind. See
+[`examples/solve_with_api.py`](examples/solve_with_api.py) and
+[`opensesame.example.toml`](opensesame.example.toml).
+
+v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)** and **OCR / distorted-text captchas**.
+
+### CLI
+
+```bash
+opensesame check                                   # validate policy + report engines/models
+opensesame download audio  --model openai/whisper-base.en
+opensesame download vision --model verytuffcat/recaptcha
+opensesame download ocr    --model anuashok/ocr-captcha-v3
+```
 
 ## Development
 
 <!-- Clone, install, run tests. -->
+
+```bash
+PYTHONPATH=src python -m pytest      # unit tests (no browser, no models)
+```
 
 ## Related projects
 
