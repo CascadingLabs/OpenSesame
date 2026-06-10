@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
-"""Live Cloudflare Turnstile solve through the OpenSesame public API.
+"""Live Cloudflare Turnstile **widget** solve through the OpenSesame public API.
 
-Drives a **real site** — 2Captcha's Turnstile demo
-(https://2captcha.com/demo/cloudflare-turnstile) — where the page is on
-`2captcha.com` but Turnstile's widget iframe is served cross-origin from
-`challenges.cloudflare.com`. Turnstile has no puzzle: OpenSesame locates the
-"Verify you are human" checkbox — which lives in a **closed shadow root** inside
-that cross-origin frame — via VoidCrawl 0.3.6's accessibility locator, drives a
-**humanized** compositor click, and harvests the minted `cf-turnstile-response`
-token. No model, no glue.
+Variant 1 of two (see `solve_turnstile_challenge_live.py` for the full-page Managed
+Challenge). Drives a **real site** — 2Captcha's embedded Turnstile demo
+(https://2captcha.com/demo/cloudflare-turnstile) — where the page is on `2captcha.com`
+but the Turnstile widget iframe is cross-origin from `challenges.cloudflare.com`.
+OpenSesame locates the "Verify you are human" checkbox — a real `<input>` in a
+**closed shadow root** inside that cross-origin frame — via VoidCrawl 0.3.6's
+accessibility locator, drives a **humanized** compositor click, and harvests the
+minted `cf-turnstile-response` token. No model, no glue.
 
-Cross-origin prerequisite: the session is launched with
-`extra_args=["disable-site-isolation-trials"]` so the Cloudflare frame stays
-in-process and reachable.
+Cross-origin prerequisite: launch with `extra_args=["disable-site-isolation-trials"]`
+so the Cloudflare frame stays in-process and AX-reachable.
 
-Note: the demo uses a Cloudflare *test* sitekey, so the minted token is a dummy
-(`XXXX.DUMMY.TOKEN.XXXX`) — it proves the click/harvest mechanics; a real token
-also depends on IP/browser reputation.
+Note: the demo uses a Cloudflare *test* sitekey (`3x…FF`), so the token is a dummy
+(`XXXX.DUMMY.TOKEN.XXXX`) — it proves the click/harvest mechanics; a real token also
+depends on IP/browser reputation.
 
 Run (needs the `live` extra; uses the unified solver venv):
 
-    PYTHONPATH=src .../venvs/solver/bin/python examples/solve_turnstile_live.py
+    PYTHONPATH=src .../venvs/solver/bin/python examples/solve_turnstile_widget_live.py
 """
 
 from __future__ import annotations

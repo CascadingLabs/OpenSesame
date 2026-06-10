@@ -222,29 +222,32 @@ class FakeTurnstilePage:
 
     def __init__(self, *, has_frame=True, checkbox_present=True,
                  preset_token="", mint_on_click=True,
-                 interstitial=False, clears_on_click=False) -> None:
+                 interstitial=False, auto_clear=False) -> None:
         self.has_frame = has_frame
         self.checkbox_present = checkbox_present
         self._token = preset_token
         self.mint_on_click = mint_on_click
         self.interstitial = interstitial
-        self.clears_on_click = clears_on_click
-        self._cleared = False
+        # The minimal-stealth browser auto-clears the managed challenge with no click.
+        self.auto_clear = auto_clear
         self.clicked = False
         self.humanized = False
 
     async def eval_js(self, js: str):
         if "cf-turnstile-response" in js:
             return self._token
-        if "just a moment" in js.lower():        # _is_interstitial probe
+        if "just a moment" in js.lower():        # _is_interstitial probe (regex test)
             return self.interstitial
+        if "document.title" in js:               # _cleared probe (title string)
+            return "Just a moment..." if (self.interstitial and not self.auto_clear) \
+                else "Demo page"
         return None
 
     async def detect_captcha(self):
-        return None if self._cleared else "turnstile"
+        return None if self.auto_clear else "turnstile"
 
     async def frame_urls(self):
-        present = self.has_frame and not self._cleared
+        present = self.has_frame and not self.auto_clear
         return ["https://challenges.cloudflare.com/cdn-cgi/c/x"] if present \
             else ["https://shop.example/checkout"]
 
@@ -255,8 +258,6 @@ class FakeTurnstilePage:
         self.humanized = humanize
         if self.mint_on_click:
             self._token = "0.TURNSTILE.TOKEN"
-        if self.clears_on_click:
-            self._cleared = True
 
 
 def test_turnstile_clicks_checkbox_and_harvests_token() -> None:
@@ -278,26 +279,26 @@ def test_turnstile_already_passed_returns_token() -> None:
     assert page.clicked is False     # no click needed
 
 
-def test_turnstile_full_page_challenge_clears_without_token() -> None:
-    """The full-page managed challenge has no token — success is the wall clearing."""
-    page = FakeTurnstilePage(interstitial=True, mint_on_click=False, clears_on_click=True)
+def test_turnstile_managed_challenge_clears_without_click() -> None:
+    """The interstitial is cleared by the minimal-stealth browser — no click, no token."""
+    page = FakeTurnstilePage(interstitial=True, auto_clear=True)
     ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x",
                    host="shop.example", vendor_kind="turnstile")
     result = run(TurnstileEngine().solve(ch, page, registry=ModelRegistry(), policy=POLICY))
     assert result.ok and result.token is None       # cleared, no token to mint
     assert result.metadata.get("cleared") is True
-    assert page.clicked                              # it did click the checkbox
+    assert page.clicked is False                     # the engine does NOT click here
 
 
-def test_turnstile_managed_challenge_not_cleared_is_honest() -> None:
-    """A reputation-blocked interstitial that never clears reports that, not 'no token'."""
-    page = FakeTurnstilePage(interstitial=True, mint_on_click=False, clears_on_click=False)
+def test_turnstile_managed_challenge_not_cleared_points_at_stealth() -> None:
+    """An interstitial that never clears reports the CDP/stealth requirement, not 'no token'."""
+    page = FakeTurnstilePage(interstitial=True, auto_clear=False)
     ch = Challenge(family=Family.TURNSTILE, url="https://shop.example/x", host="shop.example")
-    engine = TurnstileEngine(max_attempts=1)
+    engine = TurnstileEngine(clearance_tries=2)
     result = run(engine.solve(ch, page, registry=ModelRegistry(), policy=POLICY))
     assert result.status is SolveStatus.FAILED
     assert result.metadata.get("reason") == "managed_challenge"
-    assert "reputation-gated" in result.error
+    assert "VOIDCRAWL_STEALTH_NO_RUNTIME" in result.error and page.clicked is False
 
 
 def test_turnstile_no_frame_is_failure() -> None:

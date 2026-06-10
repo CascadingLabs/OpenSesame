@@ -66,11 +66,15 @@ third-party sites where the reCAPTCHA frames are served cross-origin from
 `google.com`. Cross-origin needs the session launched with
 `extra_args=["disable-site-isolation-trials"]` (Chrome keeps the google.com frames
 in-process); without it the engine returns an actionable `FAILED` with
-`metadata["frame_isolated"] = True`. **Cloudflare Turnstile** is also solved: it
-has no puzzle, so OpenSesame locates the "Verify you are human" checkbox — which
-lives in a closed shadow root inside the cross-origin `challenges.cloudflare.com`
-frame — via VoidCrawl 0.3.6's accessibility locator (`ax_box_in_frame`), drives a
-humanized compositor click, and harvests `cf-turnstile-response`. reCAPTCHA v3 /
+`metadata["frame_isolated"] = True`. **Cloudflare Turnstile** comes in two variants,
+both handled: the **embedded widget** (`solve_turnstile_widget_live.py`) — OpenSesame
+AX-locates the "Verify you are human" checkbox in the closed shadow root of the
+cross-origin `challenges.cloudflare.com` frame (`ax_box_in_frame`), humanized-clicks
+it, and harvests `cf-turnstile-response`; and the **full-page Managed Challenge**
+(`solve_turnstile_challenge_live.py`) — an edge bot-gate decided by CDP/automation
+detection, *not* a click, which a **minimal-stealth browser auto-clears** (launch
+VoidCrawl with `VOIDCRAWL_STEALTH_NO_RUNTIME` so it enables almost no CDP domain;
+OpenSesame awaits the clearance). reCAPTCHA v3 /
 hCaptcha remain detect-and-route (`REFUSED`, `route: anti-bot`), not solve targets.
 Full write-up: [`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
 

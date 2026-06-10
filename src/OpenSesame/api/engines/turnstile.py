@@ -1,23 +1,26 @@
-"""Cloudflare Turnstile — locate the checkbox via AX, humanized compositor click.
+"""Cloudflare Turnstile — two genuinely different variants behind one widget.
 
-Turnstile is unlike reCAPTCHA: there is **no image/audio puzzle to classify**. It
-passes on browser *legitimacy* (stealth fingerprint, JS proof-of-work, behaviour)
-plus — for the managed/interactive widget — a single click on the "Verify you are
-human" checkbox. That checkbox is a real ``<input type="checkbox">`` but it lives
-in a **closed shadow root** inside a **cross-origin** ``challenges.cloudflare.com``
-iframe, so page JS (`contentDocument`/`shadowRoot` are null) cannot reach it.
+**1. Embedded widget** (a `.cf-turnstile` div on a form): pass = a single click on
+the "Verify you are human" checkbox, which mints a ``cf-turnstile-response`` token.
+The checkbox is a real ``<input type="checkbox">`` in a **closed shadow root** inside
+a **cross-origin** ``challenges.cloudflare.com`` iframe — page JS can't reach it
+(`contentDocument`/`shadowRoot` are null). VoidCrawl 0.3.6's frame-rooted AX locator
+(`ax_box_in_frame`) reads the browser-computed accessibility tree, which descends into
+closed shadow roots, and returns the checkbox rect with **no shadow tampering** (that
+trips Turnstile's closed-shadow check, ERROR 600010). We drive a **humanized**
+compositor click (trusted; a DOM `.click()` is rejected) and harvest the token.
 
-VoidCrawl 0.3.6's frame-rooted accessibility locator (`ax_box_in_frame`) reads the
-browser-computed AX tree, which descends into closed shadow roots and the
-cross-origin frame, and returns the checkbox's on-page rect — with **no shadow-DOM
-tampering** (which trips Turnstile's closed-shadow check, ERROR 600010). We then
-drive a **humanized** compositor click on that rect (a trusted event — a DOM
-`.click()` is untrusted and rejected) and harvest the minted ``cf-turnstile-response``
-token from the parent form.
+**2. Full-page Managed Challenge** ("Just a moment…" interstitial): this is **not a
+token and not a click** — it is an edge-enforced browser-trust gate decided by
+**CDP/automation detection**. A browser that enables almost no CDP domains
+auto-clears it in a few seconds with no interaction; a loud CDP session never does.
+So OpenSesame does **not** click here — it detects the interstitial and **awaits the
+clearance** that the *minimal-stealth browser* produces. Launch VoidCrawl with
+``VOIDCRAWL_STEALTH_NO_RUNTIME`` (it skips Runtime/Network/Performance/Log/autoAttach/
+isolated-world enables) so the wall clears. (CAS-217.)
 
-Note: Cloudflare *test* sitekeys (``1x…`` / ``2x…`` / ``3x…``) mint a dummy token
-(``XXXX.DUMMY.TOKEN.XXXX``) that only validates against test secret keys — useful
-to prove the mechanics; real success additionally depends on IP/browser reputation.
+Note: the 2captcha widget demo uses a Cloudflare *test* sitekey (``3x…FF``) → a dummy
+``XXXX.DUMMY.TOKEN.XXXX`` token (mechanics proof; real tokens also need reputation).
 """
 
 from __future__ import annotations
@@ -49,12 +52,13 @@ _TOKEN_JS = (
 
 
 class TurnstileEngine:
-    """Solves Cloudflare Turnstile by clicking its checkbox (AX-located)."""
+    """Cloudflare Turnstile: widget → token (AX click); managed challenge → await clearance."""
 
     family = Family.TURNSTILE
 
-    def __init__(self, *, max_attempts: int = 2) -> None:
+    def __init__(self, *, max_attempts: int = 2, clearance_tries: int = 20) -> None:
         self.max_attempts = max_attempts
+        self.clearance_tries = clearance_tries   # managed-challenge clearance poll (~1s each)
 
     def model_keys(self, policy: SolverPolicy) -> list[ModelKey]:
         return []  # no local model — Turnstile is behavioural, not a puzzle
@@ -68,24 +72,23 @@ class TurnstileEngine:
         policy: SolverPolicy,
         correlation_id: str | None = None,
     ) -> SolveResult:
-        token = await self._token(page)
-        if token:                                   # already passed (invisible/managed)
-            return self._ok(challenge, token)
+        # Variant 2 — full-page Managed Challenge interstitial. Not a token, not a
+        # click: a minimal-CDP-footprint browser auto-clears it. Detect + await.
+        if await self._is_interstitial(page):
+            return await self._await_clearance(challenge, page)
 
-        if not await self._has_frame(page):
+        # Variant 1 — embedded widget: mint cf-turnstile-response via the checkbox.
+        token = await self._token(page)
+        if token:                                   # already minted (invisible/auto)
+            return self._ok(challenge, token)
+        if not await self._frame_reachable(page):
             return self._fail(challenge, "no Cloudflare Turnstile frame on page")
 
-        # Two modes with different success criteria:
-        #  - embedded widget  → mint a cf-turnstile-response token
-        #  - full-page "managed challenge" interstitial → the wall *clears* (no token)
-        interstitial = await self._is_interstitial(page)
-
         for _ in range(self.max_attempts):
-            clicked = await self._click_checkbox(page)
-            if not clicked:
-                outcome = await self._wait_outcome(challenge, page, interstitial, tries=6)
-                if outcome is not None:             # auto-passed / cleared
-                    return outcome
+            if not await self._click_checkbox(page):
+                token = await self._wait_token(page, tries=6)   # may have auto-passed
+                if token:
+                    return self._ok(challenge, token)
                 if not await self._frame_reachable(page):
                     return self._fail(
                         challenge,
@@ -96,22 +99,29 @@ class TurnstileEngine:
                 return self._fail(challenge, "Turnstile checkbox not found in challenge frame")
 
             await asyncio.sleep(0.4)                 # let the click settle / token populate
-            outcome = await self._wait_outcome(challenge, page, interstitial)
-            if outcome is not None:
-                return outcome
+            token = await self._wait_token(page)
+            if token:
+                return self._ok(challenge, token)
 
-        if interstitial:
-            # No token to mint here, and the interstitial never cleared: this is the
-            # reputation-gated managed challenge, not a mechanics failure.
-            return self._fail(
-                challenge,
-                "Cloudflare full-page managed challenge did not clear — it is "
-                "reputation-gated (clearance, not a widget token); rotate proxy/profile",
-                reason="managed_challenge",
-            )
         return self._fail(challenge, "no cf-turnstile-response token after clicking")
 
     # -- internals --------------------------------------------------------
+
+    async def _await_clearance(self, challenge, page) -> SolveResult:
+        """Wait for the Managed Challenge to clear — the *minimal-stealth browser*
+        does the work; we do not click. Honest failure names the requirement."""
+
+        for _ in range(self.clearance_tries):
+            if await self._cleared(page):
+                return self._cleared_ok(challenge)
+            await asyncio.sleep(1.0)
+        return self._fail(
+            challenge,
+            "Cloudflare managed challenge did not clear — it is decided by CDP/automation "
+            "detection, not a click. Launch the browser in minimal-stealth mode "
+            "(VOIDCRAWL_STEALTH_NO_RUNTIME, which enables almost no CDP domain) so it clears.",
+            reason="managed_challenge",
+        )
 
     async def _click_checkbox(self, page) -> bool:
         """AX-locate the checkbox in the cross-origin closed-shadow frame and
@@ -128,18 +138,6 @@ class TurnstileEngine:
                 continue
         return False
 
-    async def _wait_outcome(self, challenge, page, interstitial: bool, *, tries: int = 12):
-        """Poll for either a minted token (widget) or a cleared wall (interstitial)."""
-
-        for _ in range(tries):
-            token = await self._token(page)
-            if token:
-                return self._ok(challenge, token)
-            if interstitial and await self._cleared(page):
-                return self._cleared_ok(challenge)
-            await asyncio.sleep(0.5)
-        return None
-
     async def _is_interstitial(self, page) -> bool:
         """True for the full-page 'Just a moment…' managed challenge (vs an
         embedded widget on a normal page)."""
@@ -155,19 +153,16 @@ class TurnstileEngine:
             return False
 
     async def _cleared(self, page) -> bool:
-        """The wall is gone — Cloudflare granted clearance and left the interstitial."""
+        """The interstitial is gone — Cloudflare granted clearance and navigated to
+        the real page. Detected by the title (the destination page may have its OWN
+        Turnstile widget, so ``detect_captcha`` would still say 'turnstile')."""
 
-        detect = getattr(page, "detect_captcha", None)
-        if callable(detect):
-            try:
-                return not await detect()
-            except Exception:
-                pass
-        # Fallback: the challenge frame disappeared.
-        return not await self._frame_reachable(page)
-
-    async def _has_frame(self, page) -> bool:
-        return await self._frame_reachable(page)
+        try:
+            title = str(await page.eval_js("document.title") or "")
+        except Exception:
+            return False
+        t = title.lower()
+        return bool(title) and "just a moment" not in t and "checking your browser" not in t
 
     async def _frame_reachable(self, page) -> bool:
         frame_urls = getattr(page, "frame_urls", None)
