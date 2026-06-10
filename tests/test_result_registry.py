@@ -35,7 +35,7 @@ def test_solveresult_ok_and_accessors() -> None:
     assert not fail.ok and fail.solution is None and fail.token is None
 
 
-def test_registry_loads_once_and_refcounts() -> None:
+def test_registry_loads_once_and_caches() -> None:
     calls: list[ModelKey] = []
 
     class Provider:
@@ -53,20 +53,28 @@ def test_registry_loads_once_and_refcounts() -> None:
     reg.register_factory("whisper", factory)
     key = ModelKey(kind="whisper", model_id="base.en", device="cpu")
 
-    p1 = reg.acquire(key)
-    p2 = reg.acquire(key)
+    p1 = reg.get(key)
+    p2 = reg.get(key)
     assert p1 is p2
-    assert len(calls) == 1                 # loaded once despite two acquires
+    assert len(calls) == 1                 # loaded once, cached for the process
+    assert reg.loaded_keys() == [key]
 
-    reg.release(key)
-    assert reg.loaded_keys() == [key]      # still held by second acquire
-    assert p1.unloaded is False
-    reg.release(key)
-    assert reg.loaded_keys() == []         # last release unloads
+    reg.unload(key)                        # explicit cleanup frees + drops it
+    assert reg.loaded_keys() == []
     assert p1.unloaded is True
+
+
+def test_registry_warmup_skips_missing_factories() -> None:
+    reg = ModelRegistry()
+    reg.register_factory("whisper", lambda key: object())
+    loaded = reg.warmup([
+        ModelKey("whisper", "base.en"),
+        ModelKey("tiles", "vit"),          # no factory -> skipped, not an error
+    ])
+    assert loaded == [ModelKey("whisper", "base.en")]
 
 
 def test_registry_missing_factory_raises() -> None:
     reg = ModelRegistry()
     with pytest.raises(LookupError):
-        reg.acquire(ModelKey(kind="nope", model_id="x"))
+        reg.get(ModelKey(kind="nope", model_id="x"))

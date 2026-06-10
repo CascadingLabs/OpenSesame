@@ -137,6 +137,61 @@ def test_submit_returns_immediately_then_await() -> None:
     assert run(go()).ok
 
 
+class InjectablePage:
+    def __init__(self) -> None:
+        self.injected: str | None = None
+
+    async def inject_captcha_token(self, token: str) -> None:
+        self.injected = token
+
+
+def test_solve_applies_token_to_page_by_default() -> None:
+    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
+    solver.register_engine(Family.RECAPTCHA_V2, FakeEngine(solved()))
+    page = InjectablePage()
+    result = run(solver.solve(challenge(), page))
+    assert result.ok and result.applied is True
+    assert page.injected == "tok"          # auto-injected, no caller step
+
+
+def test_apply_false_leaves_page_untouched() -> None:
+    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], apply=False, audit_log=None))
+    solver.register_engine(Family.RECAPTCHA_V2, FakeEngine(solved()))
+    page = InjectablePage()
+    result = run(solver.solve(challenge(), page))
+    assert result.ok and result.applied is False
+    assert page.injected is None           # over-the-wire: caller injects result.token
+    assert result.token == "tok"
+
+
+def test_engine_context_autowarms_from_policy() -> None:
+    loaded: list = []
+
+    class WarmEngine:
+        family = Family.RECAPTCHA_V2
+
+        def model_keys(self, policy):
+            from OpenSesame.api.registry import ModelKey
+            return [ModelKey("whisper", "openai/whisper-base.en", policy.device)]
+
+        async def solve(self, ch, page, *, registry, policy, correlation_id=None):
+            return solved()
+
+    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
+    solver.register_engine(Family.RECAPTCHA_V2, WarmEngine())
+    solver.registry.register_factory("whisper", lambda key: loaded.append(key) or object())
+
+    async def go():
+        async with solver.engine():        # no args: warms from policy + engines
+            assert len(solver.registry.loaded_keys()) == 1
+            return await solver.solve(challenge(), InjectablePage())
+
+    result = run(go())
+    assert result.ok
+    assert len(loaded) == 1                 # warmed exactly once
+    assert solver.registry.loaded_keys() == []  # unloaded on engine() exit
+
+
 def test_audit_record_written(tmp_path) -> None:
     log = tmp_path / "audit.jsonl"
     solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=str(log)))

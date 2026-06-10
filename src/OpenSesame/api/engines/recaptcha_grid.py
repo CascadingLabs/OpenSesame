@@ -95,6 +95,10 @@ class RecaptchaGridEngine:
         self.default_model = default_model
         self.max_rounds = max_rounds
 
+    def model_keys(self, policy: SolverPolicy) -> list[ModelKey]:
+        model_id = policy.models.get("recaptcha_v2_grid") or self.default_model
+        return [ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)]
+
     async def solve(
         self,
         challenge: Challenge,
@@ -104,13 +108,9 @@ class RecaptchaGridEngine:
         policy: SolverPolicy,
         correlation_id: str | None = None,
     ) -> SolveResult:
-        model_id = policy.models.get("recaptcha_v2_grid") or self.default_model
-        key = ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)
-        selector = registry.acquire(key)
-        try:
-            return await self._solve(challenge, page, selector, model_id, policy.device)
-        finally:
-            registry.release(key)
+        key = self.model_keys(policy)[0]
+        selector = registry.get(key)  # load-once, cached for the process
+        return await self._solve(challenge, page, selector, key.model_id, policy.device)
 
     async def _solve(self, challenge, page, selector, model_id, device) -> SolveResult:
         with tempfile.TemporaryDirectory() as tmp:

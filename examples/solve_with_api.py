@@ -2,7 +2,9 @@
 """End-to-end shape of the OpenSesame public API.
 
 OpenSesame never owns the browser: VoidCrawl detects the wall and hands over a
-descriptor; OpenSesame solves and returns a token/answer; VoidCrawl injects it.
+descriptor; OpenSesame drives the live page with local models and — by default —
+**resolves the solution into the page itself** (token injected / answer typed).
+Callers just check ``result.ok``; no inject step.
 
 Run requirements (not satisfied on an API-only checkout): the ``live`` extra
 (voidcrawl) and an ``ml-*`` extra plus the solver provider modules. This file
@@ -15,41 +17,39 @@ import asyncio
 
 from OpenSesame import Challenge, SolverPolicy
 from OpenSesame.api.defaults import default_solver
-from OpenSesame.api.registry import ModelKey
 
 
 async def main() -> None:
     from voidcrawl import BrowserConfig, BrowserSession  # provided by the `live` extra
 
-    policy = SolverPolicy.auto_only(
-        allow_sites=["www.google.com"],  # default-deny: only these hosts are solved
-        device="auto",
+    # Policy is data: model choice + the default-deny allow-list live here.
+    solver = default_solver(SolverPolicy.auto_only(
+        allow_sites=["www.google.com"],
         models={"recaptcha_v2_audio": "openai/whisper-base.en"},
-    )
-    solver = default_solver(policy)
+    ))
 
     async with BrowserSession(BrowserConfig(headless=True, stealth=True)) as browser:
         page = await browser.new_page("https://www.google.com/recaptcha/api2/demo")
 
-        # 1) VoidCrawl detects + describes the challenge.
-        captcha_info = await page.capture_captcha()
-        challenge = Challenge.from_capture(captcha_info)
+        # VoidCrawl describes the challenge; OpenSesame solves it.
+        challenge = Challenge.from_capture(await page.capture_captcha())
 
-        # 2) Warm the model once, then solve (failure is a value, not an exception).
-        # produces a singleton for needed solves
-        async with solver.engine(
-            warmup=[ModelKey("whisper", "openai/whisper-base.en", "auto")]
-        ):
-            result = await solver.solve(challenge, page=page)
+        # The model loads once on first use and stays cached — no warmup ceremony.
+        # (Optional: `async with solver.engine():` pre-warms from policy and frees
+        #  VRAM on exit.) Failure is a value, not an exception.
+        result = await solver.solve(challenge, page=page)
 
-        # 3) Consume the solution. Token-grant -> inject; answer -> type.
-        if result.ok and result.solution.is_token:
-            await page.inject_captcha_token(result.token)
-            print(
-                f"solved by {result.solved_by.value} in {result.timing.elapsed_ms:.0f}ms"
-            )
+        if result.ok:
+            # SIDE EFFECT (default): the token is already resolved into the live
+            # page (#g-recaptcha-response). Just submit the form / continue.
+            print(f"solved + applied by {result.solved_by.value} "
+                  f"in {result.timing.elapsed_ms:.0f}ms")
         else:
             print(f"not solved: status={result.status.value} error={result.error!r}")
+
+    # Over-the-wire / narrow case: set policy `apply=False` to skip touching the
+    # page and take the raw token yourself (e.g. to inject into a different
+    # session or relay). Then: `await other_page.inject_captcha_token(result.token)`.
 
 
 if __name__ == "__main__":

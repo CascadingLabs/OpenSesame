@@ -80,7 +80,7 @@ def test_audio_engine_solves(monkeypatch) -> None:
     assert isinstance(result.solution, TokenSolution)
     assert result.token == "TOK-AUDIO"
     assert result.metadata["transcript"] == "hello world"
-    assert reg.loaded_keys() == []  # acquired then released
+    assert len(reg.loaded_keys()) == 1  # loaded once, cached for the process
 
 
 def test_audio_engine_surfaces_rate_limit(monkeypatch) -> None:

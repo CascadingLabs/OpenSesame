@@ -43,6 +43,14 @@ class SolverPolicy(BaseModel):
     manual_timeout_s: float = 300.0    # human-in-the-loop path
     queue_timeout_s: float = 10.0      # max wait to enter the worker pool
 
+    # Apply the solution to the live page on success — the default. OpenSesame
+    # already drives the page to solve, so it resolves the token into the DOM/CDP
+    # (or types the answer) itself: callers just check ``result.ok``, no inject
+    # step. Set ``apply = false`` for the narrower over-the-wire case where you
+    # want the raw token/answer (``result.token`` / ``result.answer``) to inject
+    # into a different session or relay yourself.
+    apply: bool = True
+
     min_confidence: float = 0.0        # below this, an auto solve is FAILED (and may escalate)
     device: str = "auto"               # opaque; resolved by the model registry
     models: dict[str, str] = Field(default_factory=dict)  # family -> opaque model_id override

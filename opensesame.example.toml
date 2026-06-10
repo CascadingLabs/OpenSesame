@@ -10,6 +10,10 @@ auto_timeout_s = 30.0
 manual_timeout_s = 300.0
 queue_timeout_s = 10.0
 
+# Apply the solution to the live page on success (default). Set false for the
+# over-the-wire case: take result.token / result.answer and inject it yourself.
+apply = true
+
 device = "auto"               # "cpu", "cuda:0", "auto"
 min_confidence = 0.0          # below this, an auto solve is FAILED (and may escalate)
 escalate_on_fail = false      # auto failure -> human-in-the-loop (needs a manual solver)

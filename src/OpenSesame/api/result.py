@@ -127,6 +127,10 @@ class SolveResult:
     policy_id: str | None = None
     correlation_id: str | None = None
     attempts: int = 1
+    # True when OpenSesame applied the solution to the live page (token injected /
+    # answer typed) — the default. False on the over-the-wire path where the
+    # caller takes the raw token/answer and applies it themselves.
+    applied: bool = False
     error: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 

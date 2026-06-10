@@ -91,21 +91,49 @@ class Solver:
     # -- lifecycle --------------------------------------------------------
 
     @contextlib.asynccontextmanager
-    async def engine(self, *, warmup: list[Any] | None = None):
-        """Own the model-registry lifetime for a block of solves.
+    async def engine(self, *, warmup: list[Any] | None = True):
+        """Optional model-lifetime scope for a block of solves.
 
-        Pre-warms the given registry keys (so a cold first call doesn't eat the
-        solve timeout) and releases them on exit for deterministic VRAM cleanup.
+        Not required: ``await solver.solve(...)`` loads its model on first use and
+        keeps it cached. ``engine()`` just pre-warms the models the policy implies
+        (so a cold first call doesn't eat the solve timeout) and unloads them on
+        exit for deterministic VRAM cleanup. ``warmup=True`` (default) derives the
+        keys from the policy + registered engines; pass an explicit key list to
+        override, or ``warmup=False`` / ``None`` to skip warming.
         """
 
-        keys = warmup or []
-        if keys:
-            self.registry.warmup(keys)
+        if warmup is True:
+            keys = self._policy_model_keys()
+        elif warmup in (False, None):
+            keys = []
+        else:
+            keys = list(warmup)
+        loaded = self.registry.warmup(keys)
         try:
             yield self
         finally:
-            for key in keys:
-                self.registry.release(key)
+            for key in loaded:
+                self.registry.unload(key)
+
+    def _policy_model_keys(self) -> list[Any]:
+        """Models the registered engines need under the current policy."""
+
+        keys: list[Any] = []
+        seen: set[Any] = set()
+        for engine in self._engines.values():
+            mk = getattr(engine, "model_keys", None)
+            if mk is None:
+                continue
+            for key in mk(self.policy):
+                if key not in seen:
+                    seen.add(key)
+                    keys.append(key)
+        return keys
+
+    def warmup(self) -> list[Any]:
+        """Eagerly load the policy's models now (returns the keys loaded)."""
+
+        return self.registry.warmup(self._policy_model_keys())
 
     # -- the ticket abstraction ------------------------------------------
 
@@ -215,8 +243,35 @@ class Solver:
         if self._should_escalate(result, policy):
             result = await self._run_manual(challenge, page, policy, correlation_id, started)
 
+        # Apply the solution to the live page by default (token injected / answer
+        # typed). policy.apply=False leaves it for the caller (over-the-wire case).
+        if result.ok and policy.apply:
+            result = await self._apply(result, challenge, page)
+
         self.audit.record(result, now=self._clock.wall())
         return result
+
+    async def _apply(self, result: SolveResult, challenge: Challenge, page: Any) -> SolveResult:
+        """Resolve the solution into the live page (best-effort)."""
+
+        from dataclasses import replace
+
+        solution = result.solution
+        applied = False
+        try:
+            if solution is not None and solution.is_token:
+                inject = getattr(page, "inject_captcha_token", None)
+                if callable(inject):
+                    await inject(solution.token)
+                applied = True   # reCAPTCHA token is already in the page from the live solve
+            elif solution is not None and solution.is_answer and challenge.response_field_selector:
+                from OpenSesame.api.engines.direct_answer import fill_via_actions
+
+                await fill_via_actions(page, challenge.response_field_selector, solution.text)
+                applied = True
+        except Exception:
+            applied = False
+        return replace(result, applied=applied)
 
     async def _run_engine(
         self,

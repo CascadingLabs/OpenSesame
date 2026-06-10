@@ -31,6 +31,14 @@ class RecaptchaV2Engine:
     def default(cls) -> "RecaptchaV2Engine":
         return cls([RecaptchaAudioEngine(), RecaptchaGridEngine()])
 
+    def model_keys(self, policy: SolverPolicy) -> list:
+        keys: list = []
+        for strategy in self.strategies:
+            mk = getattr(strategy, "model_keys", None)
+            if mk:
+                keys.extend(mk(policy))
+        return keys
+
     async def solve(
         self,
         challenge: Challenge,

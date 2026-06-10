@@ -104,6 +104,10 @@ class RecaptchaAudioEngine:
         self.default_model = default_model
         self.max_attempts = max_attempts
 
+    def model_keys(self, policy: SolverPolicy) -> list[ModelKey]:
+        model_id = policy.models.get("recaptcha_v2_audio") or self.default_model
+        return [ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)]
+
     async def solve(
         self,
         challenge: Challenge,
@@ -113,13 +117,9 @@ class RecaptchaAudioEngine:
         policy: SolverPolicy,
         correlation_id: str | None = None,
     ) -> SolveResult:
-        model_id = policy.models.get("recaptcha_v2_audio") or self.default_model
-        key = ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)
-        transcriber = registry.acquire(key)
-        try:
-            return await self._solve(challenge, page, transcriber, model_id, policy.device)
-        finally:
-            registry.release(key)
+        key = self.model_keys(policy)[0]
+        transcriber = registry.get(key)  # load-once, cached for the process
+        return await self._solve(challenge, page, transcriber, key.model_id, policy.device)
 
     async def _solve(self, challenge, page, transcriber, model_id, device) -> SolveResult:
         token = str(await page.eval_js(_READ_TOKEN) or "")

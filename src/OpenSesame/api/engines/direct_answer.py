@@ -45,6 +45,10 @@ class DirectAnswerEngine:
     def __init__(self, *, default_model: str = DEFAULT_MODEL) -> None:
         self.default_model = default_model
 
+    def model_keys(self, policy: SolverPolicy) -> list[ModelKey]:
+        model_id = policy.models.get("ocr") or self.default_model
+        return [ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)]
+
     async def solve(
         self,
         challenge: Challenge,
@@ -54,13 +58,9 @@ class DirectAnswerEngine:
         policy: SolverPolicy,
         correlation_id: str | None = None,
     ) -> SolveResult:
-        model_id = policy.models.get("ocr") or self.default_model
-        key = ModelKey(kind=PROVIDER_KIND, model_id=model_id, device=policy.device)
-        reader = registry.acquire(key)
-        try:
-            return await self._solve(challenge, page, reader, model_id, policy.device)
-        finally:
-            registry.release(key)
+        key = self.model_keys(policy)[0]
+        reader = registry.get(key)  # load-once, cached for the process
+        return await self._solve(challenge, page, reader, key.model_id, policy.device)
 
     async def _solve(self, challenge, page, reader, model_id, device) -> SolveResult:
         image_path = challenge.metadata.get("image_path")
@@ -75,9 +75,8 @@ class DirectAnswerEngine:
             return SolveResult(status=SolveStatus.FAILED, family=challenge.family,
                                error="OCR produced no text", model_id=model_id, device=device)
 
-        if challenge.response_field_selector:
-            await fill_via_actions(page, challenge.response_field_selector, text)
-
+        # The Solver applies the answer to the page (policy.apply); the engine
+        # just produces it.
         return SolveResult(
             status=SolveStatus.SOLVED, family=challenge.family,
             solution=AnswerSolution(text), solved_by=SolvedBy.LOCAL,
