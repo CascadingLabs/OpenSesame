@@ -177,7 +177,10 @@ def test_engine_context_autowarms_from_policy() -> None:
         async def solve(self, ch, page, *, registry, policy, correlation_id=None):
             return solved()
 
-    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
+    from OpenSesame.api.registry import ModelRegistry
+
+    solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None),
+                    registry=ModelRegistry())  # isolated: the default registry is process-shared
     solver.register_engine(Family.RECAPTCHA_V2, WarmEngine())
     solver.registry.register_factory("whisper", lambda key: loaded.append(key) or object())
 

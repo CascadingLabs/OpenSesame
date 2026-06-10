@@ -53,7 +53,7 @@ _GRID_STATE = r"""
     left=Math.min(left,x); top=Math.min(top,y);
     right=Math.max(right,x+r.width); bottom=Math.max(bottom,y+r.height);
     const sel = td.getAttribute('aria-pressed')==='true'
-      || td.className.indexOf('rc-imageselect-tileselected')!==-1;
+      || td.className.indexOf('selected')!==-1;   // tileselected (one-shot) or dynamic-selected
     return {index:i, row:Math.floor(i/cols), col:i%cols, selected:!!sel};
   });
   return {
@@ -112,7 +112,33 @@ class RecaptchaGridEngine:
         selector = registry.get(key)  # load-once, cached for the process
         return await self._solve(challenge, page, selector, key.model_id, policy.device)
 
+    async def _open_challenge(self, page, *, tries: int = 12) -> None:
+        """DOM-click the anchor checkbox to open the image challenge, if needed."""
+
+        already = await page.eval_js(
+            "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+            " return !!(f && f.contentDocument"
+            " && f.contentDocument.querySelector('#rc-imageselect')); })()"
+        )
+        if already:
+            return
+        await page.eval_js(
+            "(() => { const a = document.querySelector('iframe[src*=\"api2/anchor\"]');"
+            " const cb = a && a.contentDocument && a.contentDocument.querySelector('#recaptcha-anchor');"
+            " if (cb) cb.click(); })()"
+        )
+        for _ in range(tries):
+            ready = await page.eval_js(
+                "(() => { const f = document.querySelector('iframe[src*=\"api2/bframe\"]');"
+                " return !!(f && f.contentDocument"
+                " && f.contentDocument.querySelector('#rc-imageselect-target table')); })()"
+            )
+            if ready:
+                return
+            await asyncio.sleep(0.5)
+
     async def _solve(self, challenge, page, selector, model_id, device) -> SolveResult:
+        await self._open_challenge(page)
         with tempfile.TemporaryDirectory() as tmp:
             for round_index in range(self.max_rounds):
                 state = await page.eval_js(_GRID_STATE)

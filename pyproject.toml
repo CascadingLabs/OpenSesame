@@ -45,3 +45,13 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/OpenSesame"]
+
+# src layout: tell type checkers (pyright/basedpyright) where the package lives,
+# so `import OpenSesame` resolves without installing the package.
+[tool.pyright]
+extraPaths = ["src"]
+include = ["src", "tests", "examples"]
+
+[tool.basedpyright]
+extraPaths = ["src"]
+include = ["src", "tests", "examples"]

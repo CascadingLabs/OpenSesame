@@ -1,16 +1,18 @@
-"""Wiring helpers: register the default engines and (best-effort) ML providers.
+"""Wiring helpers: the opinionated, batteries-included Solver.
 
-``default_solver(policy)`` is the ergonomic entry point — a Solver with the three
-v1 engines registered (reCAPTCHA v2 audio+grid, OCR). ``install_default_providers``
-registers the model factories from the solver ML modules *if they are installed*;
-on an API-only checkout they are absent, so engines raise a clear ``LookupError``
-on ``acquire`` until the ML extras + solver modules are present.
+``default_solver(policy)`` returns a Solver with the three v1 engines registered
+(reCAPTCHA v2 audio+grid, OCR) and the built-in local-model providers installed
+(Whisper, ViT tiles, Tesseract OCR) when their dependencies are present. The
+caller names a model in policy; OpenSesame owns the tile splitting, label
+normalization, and ASR/OCR wrapping. On an API-only checkout the ML providers are
+absent, so an engine raises a clear ``LookupError`` until the extra is installed.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from OpenSesame.api.builtin import register_builtin_providers
 from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
 from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
 from OpenSesame.api.policy import SolverPolicy
@@ -27,12 +29,10 @@ def register_default_engines(solver: Solver) -> None:
 
 
 def install_default_providers(registry: ModelRegistry | None = None) -> ModelRegistry:
-    """Register model factories from the solver ML modules, if installed."""
+    """Register the built-in local-model providers whose deps are installed."""
 
     reg = registry or default_registry()
-    _try_register_whisper(reg)
-    _try_register_tiles(reg)
-    _try_register_ocr(reg)
+    register_builtin_providers(reg)
     return reg
 
 
@@ -41,33 +41,3 @@ def default_solver(policy: SolverPolicy, **kwargs: Any) -> Solver:
     register_default_engines(solver)
     install_default_providers(solver.registry)
     return solver
-
-
-def _try_register_whisper(reg: ModelRegistry) -> None:
-    if reg.has_factory("whisper"):
-        return
-    try:
-        from OpenSesame.solvers.whisper_provider import build_transcriber  # type: ignore
-    except Exception:
-        return
-    reg.register_factory("whisper", lambda key: build_transcriber(key.model_id, key.device))
-
-
-def _try_register_tiles(reg: ModelRegistry) -> None:
-    if reg.has_factory("tiles"):
-        return
-    try:
-        from OpenSesame.solvers.tile_provider import build_tile_selector  # type: ignore
-    except Exception:
-        return
-    reg.register_factory("tiles", lambda key: build_tile_selector(key.model_id, key.device))
-
-
-def _try_register_ocr(reg: ModelRegistry) -> None:
-    if reg.has_factory("ocr"):
-        return
-    try:
-        from OpenSesame.solvers.ocr_provider import build_text_reader  # type: ignore
-    except Exception:
-        return
-    reg.register_factory("ocr", lambda key: build_text_reader(key.model_id, key.device))
