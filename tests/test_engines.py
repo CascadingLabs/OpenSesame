@@ -107,6 +107,19 @@ class FakeReader:
         return "AB12CD", 0.91
 
 
+def test_challenge_ocr_sets_selectors() -> None:
+    ch = Challenge.ocr(
+        url="https://s.test/login",
+        image_selector="#cap",
+        response_field_selector="#ans",
+        capture_to="/tmp/c.png",
+    )
+    assert ch.family is Family.OCR and ch.host == "s.test"
+    assert ch.response_field_selector == "#ans"        # field, so the Solver applies it
+    assert ch.metadata["image_selector"] == "#cap"
+    assert ch.metadata["capture_to"] == "/tmp/c.png"
+
+
 def test_ocr_engine_returns_answer(tmp_path) -> None:
     img = tmp_path / "cap.png"
     img.write_bytes(b"x")

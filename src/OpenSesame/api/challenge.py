@@ -82,10 +82,31 @@ class Challenge:
         )
 
     @classmethod
-    def ocr(cls, url: str = "", **metadata: Any) -> Challenge:
-        """A direct-answer OCR/text challenge (no token, no widget)."""
+    def ocr(
+        cls,
+        url: str = "",
+        *,
+        image_selector: str | None = None,
+        response_field_selector: str | None = None,
+        **metadata: Any,
+    ) -> Challenge:
+        """A direct-answer OCR/text challenge (no token, no widget).
 
-        return cls(family=Family.OCR, url=url, host=host_of(url), metadata=metadata)
+        ``image_selector`` is the captcha image element to read; the engine also
+        accepts ``image_path`` via metadata. ``response_field_selector`` is the
+        form field the answer is typed into when the policy applies it.
+        """
+
+        md = dict(metadata)
+        if image_selector:
+            md["image_selector"] = image_selector
+        return cls(
+            family=Family.OCR,
+            url=url,
+            host=host_of(url),
+            response_field_selector=response_field_selector,
+            metadata=md,
+        )
 
 
 def family_for_kind(kind: Any) -> Family:
