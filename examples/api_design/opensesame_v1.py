@@ -28,6 +28,9 @@ uvx opensesame check
 #
 
 # 2. Scripted approach
+#
+# Consult yosoi and VoidCrawl APi desing, very pydantic heavy; only if needed
+# rich-click CLI UI is cleaner
 
 from opensesame import Solver # top level import (can be stubbed from a different module)
 from opensesame.policies import ... # policies == config but more declaritive (see yosoi IaC inspiration in ys.policys)
