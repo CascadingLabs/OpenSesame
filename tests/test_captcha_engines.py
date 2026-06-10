@@ -70,8 +70,9 @@ def _png(img) -> bytes:
 
 
 def test_detect_gap_v4_finds_synthetic_notch() -> None:
-    # A smooth background with a dark square notch at x=180; a matching opaque
-    # piece in the slice at x=10. Edge-matching should recover ~ (180-10)=170 px.
+    # A smooth background with a dark (recessed) square notch at x=180; a matching
+    # opaque piece in the slice at x=10. Local-contrast darkness should recover
+    # ~ (180-10)=170 px of slice travel.
     from PIL import Image
 
     from OpenSesame.api.engines.geetest import detect_gap_v4

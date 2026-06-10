@@ -26,7 +26,7 @@ from _recording import ScreenshotRecorder, SerializedPage  # noqa: E402
 
 DEMO = "https://2captcha.com/demo/geetest-v4"
 VIDEO = Path(".local/videos/geetest_v4.mp4")
-ATTEMPTS = 6
+ATTEMPTS = 8
 
 
 async def main() -> int:

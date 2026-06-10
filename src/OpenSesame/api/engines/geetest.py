@@ -12,12 +12,14 @@ of fullbg vs bg via ``getImageData``. Success mints ``geetest_validate``.
 
 **v4** opens a popup (``.geetest_btn_click`` → ``.geetest_box``) whose background
 and piece are CSS ``background-image`` PNGs served from ``static.geetest.com``.
-There is no "full" reference, so the gap is found by edge-template-matching the
-piece silhouette against the background (images fetched over HTTP). Two v4
-specifics matter: the popup *animates into place*, so we wait for the slider
-button position to settle before reading geometry (otherwise the drag targets a
-stale, possibly off-screen point); and success is the ``geetest_success`` state
-(e.g. "1.4 s. You beat 98% of users").
+There is no "full" reference, but GeeTest renders the cut-out notch as a *darker,
+recessed* piece-shaped region, so the gap is the position where the background
+under the piece silhouette is darkest relative to a ring around it — local
+contrast, robust to GeeTest's busy 3D-rendered backgrounds where edge-matching
+fails (images fetched over HTTP). Two v4 specifics matter: the popup *animates
+into place*, so we wait for the slider button position to settle before reading
+geometry (otherwise the drag targets a stale, possibly off-screen point); and
+success is the ``geetest_success`` state (e.g. "1.4 s. You beat 98% of users").
 
 In both, the geometry is deterministic; GeeTest additionally scores the *session*
 behaviourally (its ``gct`` tracker), which on an automated headless session is
@@ -198,12 +200,26 @@ GEETEST_V4_STATE_JS = r"""
 """
 
 
+def _dilate(b, r: int):
+    """Cross-shaped binary dilation by ``r`` (numpy, no scipy)."""
+
+    out = b.copy()
+    for _ in range(r):
+        out[:, :-1] |= out[:, 1:]
+        out[:, 1:] |= out[:, :-1]
+        out[:-1, :] |= out[1:, :]
+        out[1:, :] |= out[:-1, :]
+    return out
+
+
 def detect_gap_v4(bg_png: bytes, slice_png: bytes, bg_rect: dict, slice_rect: dict) -> float:
     """Slice travel needed (displayed px) to seat the piece in the notch.
 
-    Edge-template-matches the piece silhouette (from the slice's alpha) against
-    the background's gradient along the piece's y-band. numpy/PIL are imported
-    lazily so the module loads without them.
+    GeeTest renders the cut-out notch as a *darker, recessed* piece-shaped region,
+    so the notch is the position where the background under the piece silhouette is
+    darkest relative to a ring just around it (local contrast). This beats
+    edge-template-matching, which is fooled by GeeTest's busy 3D-rendered
+    backgrounds. numpy/PIL are imported lazily so the module loads without them.
     """
 
     from io import BytesIO
@@ -218,26 +234,23 @@ def detect_gap_v4(bg_png: bytes, slice_png: bytes, bg_rect: dict, slice_rect: di
     ys, xs = np.where(mask)
     top, bot, left, right = int(ys.min()), int(ys.max()), int(xs.min()), int(xs.max())
     pw, ph = right - left + 1, bot - top + 1
-    # Silhouette edge from the FULL slice mask (so a piece that fills its bounding
-    # box still has a boundary), then crop to the piece.
-    full = mask.astype(float)
-    fe = np.zeros_like(full)
-    fe[1:, :] += np.abs(full[1:, :] - full[:-1, :])
-    fe[:, 1:] += np.abs(full[:, 1:] - full[:, :-1])
-    pe = (fe[top:bot + 1, left:right + 1] > 0).astype(float)
-    gx = np.zeros_like(bg)
-    gy = np.zeros_like(bg)
-    gx[:, 1:-1] = bg[:, 2:] - bg[:, :-2]
-    gy[1:-1, :] = bg[2:, :] - bg[:-2, :]
-    bg_edge = np.hypot(gx, gy)
+    piece = mask[top:bot + 1, left:right + 1]
+    ring = _dilate(piece, 4) & ~piece           # a band hugging the piece outline
+    pm = piece.astype(float)
+    rm = ring.astype(float)
+    n_p = max(1.0, float(pm.sum()))
+    n_r = max(1.0, float(rm.sum()))
     y0 = int(round((slice_rect["y"] - bg_rect["y"]) * h / bg_rect["height"])) + top
     band = slice(max(0, y0), min(h, y0 + ph))
-    best_x, best = -1, -1.0
+    best_x, best = -1, -1e9
     for x in range(left + pw, w - pw):
-        region = bg_edge[band, x:x + pw]
-        score = float((region * pe[:region.shape[0], :]).sum())
-        if score > best:
-            best, best_x = score, x
+        region = bg[band, x:x + pw]
+        r = region[:pm.shape[0], :]
+        inside = float((r * pm[:r.shape[0], :]).sum()) / n_p
+        around = float((r * rm[:r.shape[0], :]).sum()) / n_r
+        contrast = around - inside              # piece darker than its ring => notch
+        if contrast > best:
+            best, best_x = contrast, x
     scale = bg_rect["width"] / w
     return max(0.0, (best_x - left) * scale)
 
@@ -325,15 +338,22 @@ class GeetestSlideEngine:
         return last
 
     async def _drag(self, page: Any, bx: float, by: float, distance: float, *, seed: int = 23) -> None:
+        rng = random.Random(seed)
         await page.dispatch_mouse_event("mouseMoved", bx, by)
         await page.dispatch_mouse_event("mousePressed", bx, by, button="left", click_count=1)
-        await asyncio.sleep(0.12)
+        await asyncio.sleep(0.18 + rng.uniform(0.0, 0.12))   # settle on the grip
+        path = human_drag_path(bx, by, distance, seed=seed)
+        n = len(path)
+        hesitate = {int(n * 0.6), int(n * 0.85)}             # human pauses homing in
         last = (bx, by)
-        for x, y in human_drag_path(bx, by, distance, seed=seed):
+        for i, (x, y) in enumerate(path):
             await page.dispatch_mouse_event("mouseMoved", x, y)
-            await asyncio.sleep(0.012 + random.Random(int(x)).uniform(0.0, 0.02))
+            delay = 0.018 + rng.uniform(0.0, 0.025)
+            if i in hesitate:
+                delay += rng.uniform(0.08, 0.18)
+            await asyncio.sleep(delay)
             last = (x, y)
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(0.12 + rng.uniform(0.0, 0.1))    # pause before releasing
         await page.dispatch_mouse_event("mouseReleased", last[0], last[1], button="left", click_count=1)
 
     async def _poll_validate(self, page: Any) -> str:
