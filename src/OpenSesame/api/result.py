@@ -2,7 +2,7 @@
 
 Failure is a *value*, not an exception: every solve attempt returns a
 ``SolveResult`` whose ``status`` says what happened. Only misconfiguration
-(a denied site, an invalid policy) raises. This keeps the data-flywheel honest —
+(a denied site, an invalid policy) raises. This keeps the data-flywheel honest;
 a timeout or a low-confidence miss is a recorded outcome, not a lost stack trace.
 """
 
@@ -128,7 +128,7 @@ class SolveResult:
     correlation_id: str | None = None
     attempts: int = 1
     # True when OpenSesame applied the solution to the live page (token injected /
-    # answer typed) — the default. False on the over-the-wire path where the
+    # answer typed); the default. False on the over-the-wire path where the
     # caller takes the raw token/answer and applies it themselves.
     applied: bool = False
     error: str = ""

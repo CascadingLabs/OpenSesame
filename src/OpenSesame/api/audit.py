@@ -5,7 +5,7 @@ Every terminal solve outcome appends one JSONL record: host, family, method
 both the responsible-use defensibility artifact (a person solving in VNC is
 materially different from forging tokens at scale, and the log makes that
 legible) and the substrate for the offline fine-tuning flywheel. It is a passive
-subscriber on the outcome — never a branch in the solve hot path.
+subscriber on the outcome; never a branch in the solve hot path.
 """
 
 from __future__ import annotations

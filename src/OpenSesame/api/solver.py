@@ -1,6 +1,6 @@
 """The one public door: ``Solver(policy=...)``.
 
-Auto (local models) and manual (humans) are different machines — different
+Auto (local models) and manual (humans) are different machines; different
 latency regimes, failure models, and scaling axes. They are split behind one
 async **ticket** abstraction so neither leaks into the caller and so V2 can swap
 the in-process future for a Redis/RQ queue without changing a single call site:
@@ -10,7 +10,7 @@ the in-process future for a Redis/RQ queue without changing a single call site:
     result = await solver.solve(challenge, page)      # sugar over the two
 
 Responsible-use is structural: ``allow_sites`` is fail-closed (a denied host
-raises ``SiteNotAllowed`` — the one place we raise instead of returning a value).
+raises ``SiteNotAllowed``; the one place we raise instead of returning a value).
 """
 
 from __future__ import annotations
@@ -35,15 +35,15 @@ from OpenSesame.api.result import (
 )
 
 
-# Families OpenSesame deliberately does not solve. reCAPTCHA v3 is score-based —
-# there is no challenge to crack, only a reputation/behavior signal — and
+# Families OpenSesame deliberately does not solve. reCAPTCHA v3 is score-based;
+# there is no challenge to crack, only a reputation/behavior signal; and
 # hCaptcha / Turnstile are out of the v1 scope. These are a *detect-and-route*
 # concern (hand off to the anti-bot/proxy layer), so we REFUSE with a clear
 # route hint rather than returning a vague "no engine registered" FAILED.
 _OUT_OF_SCOPE_ROUTES: dict[Family, str] = {
-    Family.RECAPTCHA_V3: "reCAPTCHA v3 is score-based (no challenge to solve) — route to the anti-bot layer",
-    Family.HCAPTCHA: "hCaptcha is out of v1 scope — route to the anti-bot layer",
-    Family.TURNSTILE: "Cloudflare Turnstile is out of v1 scope — route to the anti-bot layer",
+    Family.RECAPTCHA_V3: "reCAPTCHA v3 is score-based (no challenge to solve); route to the anti-bot layer",
+    Family.HCAPTCHA: "hCaptcha is out of v1 scope; route to the anti-bot layer",
+    Family.TURNSTILE: "Cloudflare Turnstile is out of v1 scope; route to the anti-bot layer",
 }
 
 
@@ -159,7 +159,7 @@ class Solver:
     ) -> Ticket:
         """Validate + enqueue a solve; return a ticket immediately.
 
-        Raises ``SiteNotAllowed`` (misconfiguration, fail-closed) — the only
+        Raises ``SiteNotAllowed`` (misconfiguration, fail-closed); the only
         non-value failure. Everything else surfaces as a ``SolveResult``.
         """
 

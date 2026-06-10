@@ -2,11 +2,11 @@
 
 Loading a transcription/vision pipeline costs hundreds of MB of VRAM and seconds
 of disk I/O, so models are owned by a *process-wide* registry keyed by
-``(kind, model_id, device)`` — never by a Solver instance or a per-call closure,
+``(kind, model_id, device)``; never by a Solver instance or a per-call closure,
 or 8 concurrent solves reload the model 8 times and OOM the GPU.
 
 ``get`` loads once and caches for the process lifetime, so a plain
-``await solver.solve(...)`` warms on the first call and stays warm — no caller
+``await solver.solve(...)`` warms on the first call and stays warm; no caller
 ceremony. ``Solver.engine()`` is optional sugar: it pre-warms the policy's models
 and unloads them on exit for deterministic VRAM cleanup. The heavy implementations
 (Whisper, ViT/CLIP, OCR) live in the solver modules and register a *factory* here,

@@ -3,7 +3,7 @@
 A value belongs in policy if you'd diff it across runs to explain a behavior
 change (allowed sites, timeouts, model choices, rate limits). The challenge
 instance, the live page, callbacks, and correlation ids stay imperative
-``solve()`` arguments — they are not policy.
+``solve()`` arguments; they are not policy.
 
 Policy is frozen + ``extra="forbid"`` so a typo'd TOML key fails loud instead of
 silently doing nothing. Responsible-use is structural: ``allow_sites`` is
@@ -43,7 +43,7 @@ class SolverPolicy(BaseModel):
     manual_timeout_s: float = 300.0    # human-in-the-loop path
     queue_timeout_s: float = 10.0      # max wait to enter the worker pool
 
-    # Apply the solution to the live page on success — the default. OpenSesame
+    # Apply the solution to the live page on success; the default. OpenSesame
     # already drives the page to solve, so it resolves the token into the DOM/CDP
     # (or types the answer) itself: callers just check ``result.ok``, no inject
     # step. Set ``apply = false`` for the narrower over-the-wire case where you

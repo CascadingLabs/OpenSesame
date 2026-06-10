@@ -1,4 +1,4 @@
-"""Built-in local-model providers — the opinionated batteries.
+"""Built-in local-model providers; the opinionated batteries.
 
 OpenSesame owns the captcha-specific glue (tile splitting, reCAPTCHA label
 normalization, ASR/OCR wrapping) so a caller never writes it. These providers
@@ -64,7 +64,7 @@ class ViTTileSelector:
     """Local image classifier over reCAPTCHA grid tiles.
 
     OpenSesame splits the grid, classifies each tile with the model, normalizes
-    the prompt target to the model's labels, and returns the matching cells —
+    the prompt target to the model's labels, and returns the matching cells;
     the caller just names the model.
     """
 

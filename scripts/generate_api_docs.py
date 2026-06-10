@@ -121,7 +121,7 @@ def _render_docstring(obj: Object) -> str:
                     if param.description
                     else ""
                 )
-                parts.append(f"- `{param.name}` {ann} — {desc}")
+                parts.append(f"- `{param.name}` {ann}: {desc}")
             parts.append("")
 
         elif kind == "attributes":
@@ -133,7 +133,7 @@ def _render_docstring(obj: Object) -> str:
                     if attr.description
                     else ""
                 )
-                parts.append(f"- `{attr.name}` {ann} — {desc}")
+                parts.append(f"- `{attr.name}` {ann}: {desc}")
             parts.append("")
 
         elif kind in ("returns", "yields"):
@@ -142,7 +142,7 @@ def _render_docstring(obj: Object) -> str:
                 section.value if isinstance(section.value, list) else [section.value]
             )
             descs = [
-                (f"`{i.annotation}` — " if i.annotation else "")
+                (f"`{i.annotation}`: " if i.annotation else "")
                 + _strip_rst_roles(i.description or "")
                 for i in items
             ]
@@ -155,7 +155,7 @@ def _render_docstring(obj: Object) -> str:
                 desc = (
                     _strip_rst_roles(exc.description.strip()) if exc.description else ""
                 )
-                parts.append(f"- `{exc.annotation}` — {desc}")
+                parts.append(f"- `{exc.annotation}`: {desc}")
             parts.append("")
 
         elif kind == "examples":

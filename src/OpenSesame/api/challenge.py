@@ -4,7 +4,7 @@ VoidCrawl detects the wall and hands over a descriptor via ``capture_captcha``
 (`CaptchaInfo`: kind, sitekey, widget rect, response-field selector, existing
 token, action/cdata, page url). ``Challenge`` mirrors that, plus the host and
 the classified ``Family``. The live page handle is passed *separately* to
-``solve()`` — it is imperative state, not part of the serializable descriptor.
+``solve()``; it is imperative state, not part of the serializable descriptor.
 """
 
 from __future__ import annotations
