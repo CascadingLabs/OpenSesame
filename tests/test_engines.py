@@ -158,3 +158,20 @@ def test_composite_falls_through_to_second_strategy() -> None:
     ch = Challenge(family=Family.RECAPTCHA_V2, url="https://www.google.com/x", host="www.google.com")
     result = run(engine.solve(ch, object(), registry=ModelRegistry(), policy=POLICY))
     assert result.ok and result.token == "grid-tok"
+
+
+def test_composite_short_circuits_on_audio_rate_limit() -> None:
+    """A rate-limit (session/IP) shouldn't burn a grid attempt — surface it."""
+
+    class StratRateLimited:
+        family = Family.RECAPTCHA_V2
+        tried = False
+
+        async def solve(self, ch, page, *, registry, policy, correlation_id=None):
+            return SolveResult(status=SolveStatus.RATE_LIMITED, family=ch.family)
+
+    grid = StratOK()
+    engine = RecaptchaV2Engine([StratRateLimited(), grid])
+    ch = Challenge(family=Family.RECAPTCHA_V2, url="https://www.google.com/x", host="www.google.com")
+    result = run(engine.solve(ch, object(), registry=ModelRegistry(), policy=POLICY))
+    assert result.status is SolveStatus.RATE_LIMITED   # did not fall through to the grid

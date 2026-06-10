@@ -45,5 +45,11 @@ opensesame = "OpenSesame.cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+# src layout: the project type-checks with Mypy. (Editor/IDE type checkers are a
+# local concern — configure their src path in your editor, not here.)
+[tool.mypy]
+mypy_path = "src"
+packages = ["OpenSesame"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/OpenSesame"]

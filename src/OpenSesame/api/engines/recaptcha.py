@@ -49,12 +49,18 @@ class RecaptchaV2Engine:
         correlation_id: str | None = None,
     ) -> SolveResult:
         last: SolveResult | None = None
-        # Policy may pin a single strategy order, e.g. models["recaptcha_v2_strategy"]="grid".
+        # Audio is the preferred path for reCAPTCHA v2 (reliable local token mint);
+        # the image grid is a fallback. Policy may pin a single strategy via
+        # models["recaptcha_v2_strategy"] = "audio" | "grid".
         for strategy in self._ordered(policy):
             result = await strategy.solve(
                 challenge, page, registry=registry, policy=policy, correlation_id=correlation_id,
             )
             if result.ok:
+                return result
+            # A rate-limit is a session/IP problem (downstream rotates proxy/profile);
+            # don't burn a grid attempt on a throttled session — surface it.
+            if result.status is SolveStatus.RATE_LIMITED:
                 return result
             last = result
         return last or SolveResult(
