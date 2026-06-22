@@ -6,6 +6,24 @@
 
 TODO: Replace this section with the repo's actual purpose, major responsibilities, and domain vocabulary.
 
+## Captcha solving via MCP (solver on tap)
+
+When you are driving a browser and hit a captcha / anti-bot wall, solve it with
+the **OpenSesame MCP** without leaving your primary browser tool. OpenSesame
+attaches to the Chrome you are already driving, adopts the *exact tab*, solves in
+place, and detaches — the token/answer lands in your tab.
+
+- Skill: [`.agents/skills/solve-captcha-wall/SKILL.md`](.agents/skills/solve-captcha-wall/SKILL.md)
+  (also discovered by Claude via `.claude/skills/`; Codex needs `--enable skills`).
+- Tools (`opensesame` server): `detect(ws_url, target_id)` and
+  `solve(ws_url, target_id, family?)`.
+- Get `ws_url` + `target_id` from the primary driver — the VoidCrawl MCP
+  `session_open` returns both (pass it a `port`). Runnable end-to-end example:
+  [`examples/solve_on_tap_live.py`](examples/solve_on_tap_live.py).
+- MCP registration is committed for all three harnesses: `.mcp.json` (Claude
+  Code), the `mcp` block in `opencode.json` (OpenCode), `.codex/config.toml`
+  (Codex).
+
 ## Read first
 
 - this file

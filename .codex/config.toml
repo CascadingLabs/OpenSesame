@@ -1,0 +1,20 @@
+# Project-scoped Codex config. Registers the browser driver (voidcrawl) and the
+# OpenSesame solver-on-tap MCP, both over stdio. Loads only in *trusted*
+# projects; the global ~/.codex/config.toml is the zero-setup fallback.
+#
+# Codex skills are experimental — run `codex --enable skills` to use the
+# `solve-captcha-wall` skill (in .agents/skills/), invoked as `$solve-captcha-wall`.
+# Usage guidance is also pointed to from AGENTS.md (which Codex reads).
+
+[mcp_servers.voidcrawl]
+command = "voidcrawl-mcp"
+args = []
+
+[mcp_servers.voidcrawl.env]
+BROWSER_COUNT = "1"
+TABS_PER_BROWSER = "5"
+CHROME_HEADLESS = "1"
+
+[mcp_servers.opensesame]
+command = "/home/andrew/Desktop/cl/OpenSesame/.local/venvs/solver/bin/opensesame-mcp"
+args = []
