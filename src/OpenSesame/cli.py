@@ -26,8 +26,9 @@ _KIND_DEFAULTS = {
     "audio": "openai/whisper-base.en",
     "vision": "verytuffcat/recaptcha",
     "ocr": "anuashok/ocr-captcha-v3",
+    "hcaptcha": "Qwen/Qwen2.5-VL-7B-Instruct",
 }
-_KIND_PROVIDER = {"audio": "whisper", "vision": "tiles", "ocr": "ocr"}
+_KIND_PROVIDER = {"audio": "whisper", "vision": "tiles", "ocr": "ocr", "hcaptcha": "vlm"}
 
 
 @click.group()

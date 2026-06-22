@@ -1,0 +1,1 @@
+../../../.agents/skills/solve-captcha-wall/SKILL.md

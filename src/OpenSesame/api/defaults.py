@@ -13,10 +13,15 @@ from __future__ import annotations
 from typing import Any
 
 from OpenSesame.api.builtin import register_builtin_providers
+from OpenSesame.api.engines.altcha import AltchaEngine
+from OpenSesame.api.engines.cap import CapEngine
 from OpenSesame.api.engines.direct_answer import DirectAnswerEngine
 from OpenSesame.api.engines.geetest import GeetestSlideEngine
+from OpenSesame.api.engines.hcaptcha import HcaptchaEngine
 from OpenSesame.api.engines.mtcaptcha import MtcaptchaEngine
+from OpenSesame.api.engines.puzzle import PuzzleEngine
 from OpenSesame.api.engines.recaptcha import RecaptchaV2Engine
+from OpenSesame.api.engines.recaptcha_v3 import RecaptchaV3Engine
 from OpenSesame.api.engines.rotate import RotateEngine
 from OpenSesame.api.engines.turnstile import TurnstileEngine
 from OpenSesame.api.policy import SolverPolicy
@@ -29,11 +34,16 @@ def register_default_engines(solver: Solver) -> None:
     recaptcha = RecaptchaV2Engine.default()
     solver.register_engine(Family.RECAPTCHA_V2, recaptcha)
     solver.register_engine(Family.RECAPTCHA_V2_INVISIBLE, recaptcha)
+    solver.register_engine(Family.RECAPTCHA_V3, RecaptchaV3Engine())
     solver.register_engine(Family.OCR, DirectAnswerEngine())
     solver.register_engine(Family.TURNSTILE, TurnstileEngine())
+    solver.register_engine(Family.HCAPTCHA, HcaptchaEngine())
     solver.register_engine(Family.MTCAPTCHA, MtcaptchaEngine())
     solver.register_engine(Family.GEETEST, GeetestSlideEngine())
     solver.register_engine(Family.ROTATE, RotateEngine())
+    solver.register_engine(Family.CAP, CapEngine())
+    solver.register_engine(Family.ALTCHA, AltchaEngine())
+    solver.register_engine(Family.PUZZLE, PuzzleEngine())
 
 
 def install_default_providers(registry: ModelRegistry | None = None) -> ModelRegistry:

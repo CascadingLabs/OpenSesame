@@ -72,17 +72,27 @@ def test_no_engine_is_failed_value_not_raise() -> None:
     assert "no engine" in result.error
 
 
-@pytest.mark.parametrize(
-    "family",
-    [Family.RECAPTCHA_V3, Family.HCAPTCHA],
-)
-def test_out_of_scope_family_is_refused_and_routed(family) -> None:
-    """v3/hCaptcha are detect-and-route, not a generic 'no engine' miss.
+def test_no_families_currently_routed_out_of_scope() -> None:
+    """The detect-and-route REFUSED set is empty now: Turnstile, hCaptcha, and
+    reCAPTCHA v3 are all solve targets (see their engines). The mechanism stays
+    for any future route-only family — see the monkeypatched test below."""
+    from OpenSesame.api.solver import _OUT_OF_SCOPE_ROUTES
 
-    (Turnstile is now a solve target — see TurnstileEngine — so it is not here.)
-    """
+    assert _OUT_OF_SCOPE_ROUTES == {}
+
+
+def test_out_of_scope_route_mechanism_refuses_with_reason(monkeypatch) -> None:
+    """A family marked route-only REFUSES with a clear reason + route hint, not the
+    generic 'no engine' miss. Driven via a synthetic entry so the path stays tested
+    even while no real family is routed out."""
+    import OpenSesame.api.solver as solver_mod
+
+    monkeypatch.setattr(
+        solver_mod, "_OUT_OF_SCOPE_ROUTES",
+        {Family.HCAPTCHA: "synthetic route-only family for the mechanism test"},
+    )
     solver = Solver(SolverPolicy(allow_sites=["www.google.com"], audit_log=None))
-    ch = Challenge(family=family, url="https://www.google.com/x", host="www.google.com")
+    ch = Challenge(family=Family.HCAPTCHA, url="https://www.google.com/x", host="www.google.com")
     result = run(solver.solve(ch, PAGE))
     assert result.status is SolveStatus.REFUSED
     assert result.metadata.get("route") == "anti-bot"

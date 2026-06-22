@@ -35,16 +35,12 @@ from OpenSesame.api.result import (
 )
 
 
-# Families OpenSesame deliberately does not solve. reCAPTCHA v3 is score-based;
-# there is no challenge to crack, only a reputation/behavior signal; and hCaptcha
-# is out of scope. These are a *detect-and-route* concern (hand off to the
-# anti-bot/proxy layer), so we REFUSE with a clear route hint rather than
-# returning a vague "no engine registered" FAILED. (Turnstile *is* now a solve
-# target — see TurnstileEngine — so it is no longer routed here.)
-_OUT_OF_SCOPE_ROUTES: dict[Family, str] = {
-    Family.RECAPTCHA_V3: "reCAPTCHA v3 is score-based (no challenge to solve); route to the anti-bot layer",
-    Family.HCAPTCHA: "hCaptcha is out of v1 scope; route to the anti-bot layer",
-}
+# Families OpenSesame deliberately does not solve — a *detect-and-route* concern
+# (hand off to the anti-bot/proxy layer), REFUSED with a clear route hint rather
+# than a vague "no engine registered" FAILED. Currently empty: Turnstile, hCaptcha,
+# and reCAPTCHA v3 are all solve targets now (see TurnstileEngine / HcaptchaEngine /
+# RecaptchaV3Engine). The mechanism stays for any future route-only family.
+_OUT_OF_SCOPE_ROUTES: dict[Family, str] = {}
 
 
 @dataclass

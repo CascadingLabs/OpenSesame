@@ -55,7 +55,7 @@ Redis/noVNC deployment swaps behind. See
 [`examples/solve_with_api.py`](examples/solve_with_api.py) and
 [`opensesame.example.toml`](opensesame.example.toml).
 
-v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)**, **Cloudflare Turnstile**, and **OCR / distorted-text captchas**.
+v1 use cases: **reCAPTCHA v2 (audio side-door + image grid)**, **Cloudflare Turnstile**, **hCaptcha (canvas VLM grounding)**, and **OCR / distorted-text captchas**.
 
 **Scope & generalization.** The architecture is vendor-agnostic (`Family`→engine
 routing, the audio/grid strategy composite, the provider registry), and the
@@ -74,8 +74,10 @@ it, and harvests `cf-turnstile-response`; and the **full-page Managed Challenge*
 (`solve_turnstile_challenge_live.py`) — an edge bot-gate decided by CDP/automation
 detection, *not* a click, which a **minimal-stealth browser auto-clears** (launch
 VoidCrawl with `VOIDCRAWL_STEALTH_NO_RUNTIME` so it enables almost no CDP domain;
-OpenSesame awaits the clearance). reCAPTCHA v3 /
-hCaptcha remain detect-and-route (`REFUSED`, `route: anti-bot`), not solve targets.
+OpenSesame awaits the clearance). **hCaptcha** is a solve target too: its challenge is
+painted to a `<canvas>` (no DOM tiles), so OpenSesame screenshots it ("point-in-time
+imaging"), a local VLM (Qwen2.5-VL) **grounds** the cell to click, and a humanized pointer
+clicks it on the canvas, then harvests `h-captcha-response` (`solve_hcaptcha_live.py`).
 Full write-up: [`docs/recaptcha-generalization.md`](docs/recaptcha-generalization.md).
 
 ### CLI
