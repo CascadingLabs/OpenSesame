@@ -20,7 +20,7 @@ dev = [
   "pytest>=8.0",
 ]
 live = [
-  "voidcrawl>=0.3.4",
+  "voidcrawl>=0.3.7",
 ]
 ml-base = [
   "huggingface-hub>=0.36",

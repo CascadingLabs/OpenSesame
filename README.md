@@ -18,6 +18,9 @@
 Async-native self-hosted captcha/token-solving microservice with no paid
 solver APIs.
 
+> [!WARNING]
+> OpenSesame is research tooling for API design and web reverse engineering. **You assume all legal risk for how you use it.** Respect `robots.txt`, rate limits, and IP bans; and please don't bypass them with Tor or a VPN. Read [DISCLAIMER.md](DISCLAIMER.md) before pointing it at anything.
+
 ## Usage
 
 OCR fast-path smoke:
@@ -215,6 +218,7 @@ throughput targets.
 - **Support:** see [SUPPORT.md](SUPPORT.md)
 - **Security:** see [SECURITY.md](SECURITY.md)
 - **Code of Conduct:** see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- **Responsible use:** see [DISCLAIMER.md](DISCLAIMER.md)
 
 ## Contact
 
