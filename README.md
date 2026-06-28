@@ -17,6 +17,10 @@
 
 Self-hosted captcha/token-solving microservice with no paid solver APIs.
 
+## Disclaimer & Responsible Use
+
+[DISCLAIMER.md](DISCLAIMER.md)
+
 ## Usage
 
 <!-- Quickstart: the one or two commands someone copy-pastes to try it. -->
