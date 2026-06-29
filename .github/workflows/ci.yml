@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    name: Style checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out OpenSesame
+        uses: actions/checkout@v4
+
+      - name: Check out VoidCrawl dependency
+        run: |
+          sudo mkdir -p /home/andrew/Desktop/cl
+          sudo chown -R "$USER:$USER" /home/andrew
+          git clone --depth 1 https://github.com/CascadingLabs/VoidCrawl.git /home/andrew/Desktop/cl/VoidCrawl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy
+
+      - name: djLint check
+        run: uv run djlint --check opensesame/frontend/templates
+
+  tests:
+    name: Tests / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - name: Check out OpenSesame
+        uses: actions/checkout@v4
+
+      - name: Check out VoidCrawl dependency
+        run: |
+          sudo mkdir -p /home/andrew/Desktop/cl
+          sudo chown -R "$USER:$USER" /home/andrew
+          git clone --depth 1 https://github.com/CascadingLabs/VoidCrawl.git /home/andrew/Desktop/cl/VoidCrawl
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Run pytest
+        run: uv run pytest
