@@ -63,6 +63,40 @@ Then open `http://127.0.0.1:8765`, click into VNC/noVNC, solve the challenge,
 and press **Mark resolved** in OpenSesame. The demo command re-probes the same
 VoidCrawl tab and prints whether the captcha is gone.
 
+For the MTCaptcha HITL resume example:
+
+```bash
+# terminal 1, from ../VoidCrawl
+./docker/run-headful.sh
+
+# terminal 2, from this repo
+uv run python examples/mtcaptcha_resume.py --open-ui
+# equivalent CLI path:
+uv run opensesame demo mtcaptcha --open-ui
+```
+
+This sends the same VoidCrawl tab to OpenSesame, lets a human clear the
+MTCaptcha challenge in noVNC/VNC, then resumes automation and re-probes the page.
+
+To queue every demo capture as pending work for frontend stress testing, without
+solving any of them:
+
+```bash
+# terminal 1, from ../VoidCrawl
+./docker/run-headful.sh
+
+# terminal 2, from this repo
+uv run opensesame demo all
+```
+
+`all` covers the 2Captcha demo set plus one representative XCaptcha variant.
+XCaptcha variants share one site session, so solving one can clear the rest; the
+other variants stay available as individual `opensesame demo run xcaptcha-*`
+targets. `all` opens concurrent tabs in one VoidCrawl browser session, queues
+the resulting browser states in OpenSesame, and does not auto-open the dashboard.
+Open `http://127.0.0.1:8765` yourself when ready. Use Ctrl-C when done or pass
+`--exit-after-all` if an existing UI is already up.
+
 ## Development
 
 ```bash

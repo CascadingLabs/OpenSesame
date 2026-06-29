@@ -178,7 +178,7 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
             offset=(current_page - 1) * per_page,
         )
         pending_count = await store.count_events("pending")
-        pending = await store.list_events("pending", limit=5)
+        pending = await store.list_events("pending")
         return TEMPLATES.TemplateResponse(
             request,
             "history.html",

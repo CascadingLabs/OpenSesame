@@ -22,6 +22,7 @@ from opensesame.demo import (
     DEFAULT_OPENSESAME_URL,
     DEFAULT_VNC_URL,
     DEMO_TARGETS,
+    arm_all_demo_events,
     run_demo,
 )
 from opensesame.events import TakeoverEvent
@@ -234,6 +235,7 @@ def demo_run(
                 "serve_ui": serve_ui,
                 "open_ui": open_ui,
                 "ui_prompt": ui_prompt,
+                "force_takeover": challenge_type == "mtcaptcha",
             }
         )
     asyncio.run(
@@ -251,6 +253,7 @@ def demo_run(
             serve_ui=serve_ui,
             open_ui=open_ui,
             ui_prompt=ui_prompt,
+            force_takeover=challenge_type == "mtcaptcha",
         )
     )
 
@@ -344,6 +347,87 @@ def demo_turnstile(ctx: click.Context, /, **kwargs: Any) -> None:
 def demo_recaptcha(ctx: click.Context, /, **kwargs: Any) -> None:
     """Run the reCAPTCHA v2 takeover demo."""
     invoke_demo(ctx, "recaptcha", **kwargs)
+
+
+@demo.command("mtcaptcha")
+@demo_options
+@click.pass_context
+def demo_mtcaptcha(ctx: click.Context, /, **kwargs: Any) -> None:
+    """Run the 2Captcha MTCaptcha human takeover example."""
+    invoke_demo(ctx, "mtcaptcha", **kwargs)
+
+
+@demo.command("all")
+@click.option("--opensesame-url", default=DEFAULT_OPENSESAME_URL)
+@click.option("--port", default=9222, type=int)
+@click.option("--docker-headful/--local-headful", default=True)
+@click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)
+@click.option("--novnc-url", default=DEFAULT_NOVNC_URL)
+@click.option("--vnc-url", default=DEFAULT_VNC_URL)
+@click.option("--timeout", default=20.0, type=float)
+@click.option(
+    "--concurrency",
+    default=6,
+    type=click.IntRange(1, 19),
+    help="Number of concurrent tabs to arm in the same browser session.",
+)
+@click.option("--serve-ui/--no-serve-ui", default=True)
+@click.option("--open-ui", is_flag=True)
+@click.option(
+    "--keep-ui/--exit-after-all",
+    default=True,
+    help="Keep the started OpenSesame UI running after queueing captures.",
+)
+@click.option(
+    "--db",
+    "db_path",
+    default=str(DEFAULT_DB_PATH),
+    type=click.Path(path_type=Path),
+)
+@click.pass_context
+def demo_arm_all(
+    ctx: click.Context,
+    opensesame_url: str,
+    port: int,
+    docker_headful: bool,
+    docker_version_url: str,
+    novnc_url: str,
+    vnc_url: str,
+    timeout: float,
+    concurrency: int,
+    serve_ui: bool,
+    open_ui: bool,
+    keep_ui: bool,
+    db_path: Path,
+) -> None:
+    """Queue every demo capture in OpenSesame without solving them."""
+    if wants_json(ctx):
+        echo_json(
+            {
+                "event": "demo_all_start",
+                "count": len(DEMO_TARGETS),
+                "opensesame_url": opensesame_url,
+                "db": str(db_path),
+                "keep_ui": keep_ui,
+                "concurrency": concurrency,
+            }
+        )
+    asyncio.run(
+        arm_all_demo_events(
+            db_path=db_path,
+            opensesame_url=opensesame_url,
+            port=port,
+            docker_headful=docker_headful,
+            docker_version_url=docker_version_url,
+            novnc_url=novnc_url,
+            vnc_url=vnc_url,
+            timeout=timeout,
+            concurrency=concurrency,
+            serve_ui=serve_ui,
+            open_ui=open_ui,
+            keep_ui=keep_ui,
+        )
+    )
 
 
 @main.command("list")

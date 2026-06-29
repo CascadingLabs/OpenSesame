@@ -8,6 +8,30 @@ import pytest
 from opensesame import cli, demo
 
 
+def test_requested_demo_targets_are_registered():
+    assert demo.DEMO_TARGETS["mtcaptcha"] == "https://2captcha.com/demo/mtcaptcha"
+    assert demo.DEMO_TARGETS["recaptcha-v3-enterprise"].endswith(
+        "/recaptcha-v3-enterprise"
+    )
+    assert demo.DEMO_TARGETS["xcaptcha-moving"] == "https://xcaptcha.com/demo"
+    assert len(demo.DEMO_ARM_TARGETS) == 16
+    assert [n for n in demo.DEMO_ARM_TARGETS if n.startswith("xcaptcha-")] == [
+        "xcaptcha-text-click-v1"
+    ]
+
+
+def test_xcaptcha_demo_targets_have_prepare_clicks():
+    text_click_v1_sitekey = "".join(["5b4fc1a2", "21c3e79c", "9bac1903", "63808884"])
+    no_captcha_sitekey = "".join(["a537c95d", "43097aed", "9cd8a295", "ecdc2a79"])
+
+    assert demo.DEMO_PREPARE_SELECTORS[
+        "xcaptcha-text-click-v1"
+    ] == demo.xcaptcha_button(text_click_v1_sitekey)
+    assert demo.DEMO_PREPARE_SELECTORS["xcaptcha-no-captcha"] == demo.xcaptcha_button(
+        no_captcha_sitekey
+    )
+
+
 def test_open_url_prompt_loop_allows_repeated_opens(monkeypatch):
     url = "http://127.0.0.1:8765"
     answers = iter(["o", " O ", "no", "", "o"])

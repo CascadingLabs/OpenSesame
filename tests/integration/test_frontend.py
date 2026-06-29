@@ -93,7 +93,7 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
 
         history_with_pending = client.get("/history")
         assert history_with_pending.status_code == 200
-        assert 'href="/#event-event-1"' in history_with_pending.text
+        assert 'href="/queue#event-event-1"' in history_with_pending.text
 
         # Simulate existing rows that recorded noVNC solves as manual_vnc.
         resolved = client.post(
@@ -120,6 +120,20 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert empty_events.status_code == 200
         assert "All solved" in empty_events.text
         assert "No pending takeovers" in empty_events.text
+
+
+def test_notification_tray_renders_all_items_for_css_scrolling(tmp_path):
+    app = create_app(tmp_path / "opensesame.sqlite3", notify=False, open_on_event=False)
+
+    with TestClient(app) as client:
+        for index in range(8):
+            create_voidcrawl_event(client, f"event-{index}")
+
+        home = client.get("/")
+        assert home.status_code == 200
+        assert ">8</span>" in home.text
+        assert home.text.count('data-target-id="event-') == 8
+        assert home.text.count('href="/queue#event-') == 8
 
 
 def test_resolving_current_takeover_reveals_next_pending_card(tmp_path):

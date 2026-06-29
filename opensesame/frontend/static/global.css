@@ -169,11 +169,15 @@ body {
   border: 1px solid var(--cl-border);
   box-shadow: 0 1rem 2rem rgba(0, 0, 0, .25);
   color: var(--cl-text);
-  left: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100dvh - 4.5rem);
   max-width: min(22rem, calc(100vw - 2rem));
   padding: 0;
   position: absolute;
+  right: 50%;
   top: calc(100% + .65rem);
+  transform: translateX(50%);
   width: 22rem;
   z-index: 20;
 }
@@ -183,10 +187,10 @@ body {
   border-top: 1px solid var(--cl-border);
   content: "";
   height: .6rem;
-  left: .7rem;
+  left: 50%;
   position: absolute;
   top: -.35rem;
-  transform: rotate(45deg);
+  transform: translateX(-50%) rotate(45deg);
   width: .6rem;
 }
 .notification-tray[hidden] {
@@ -217,9 +221,19 @@ body {
   color: var(--cl-accent-text);
 }
 .notification-list {
+  --notification-row-height: 4.25rem;
   display: grid;
   gap: .5rem;
+  max-height: min(
+    calc((var(--notification-row-height) * 6) + (.5rem * 5) + 2rem),
+    calc(100dvh - 9rem)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1rem;
+}
+.notification-list:has(a[data-notification-item]) {
+  min-height: calc((var(--notification-row-height) * 2) + .5rem + 2rem);
 }
 .notification-list a {
   align-items: center;
@@ -228,6 +242,7 @@ body {
   display: grid;
   gap: .65rem;
   grid-template-columns: 1.25rem minmax(0, 1fr);
+  min-height: var(--notification-row-height);
   padding: .75rem;
 }
 .notification-list a:hover {
@@ -433,8 +448,16 @@ select {
   letter-spacing: .08em;
   text-transform: uppercase;
 }
+.event-table tr {
+  scroll-margin-top: 1rem;
+}
 .event-table tr:hover td { background: var(--cl-link-hover-bg); }
-.event-table .active-row td { background: color-mix(in srgb, var(--cl-accent) 8%, transparent); }
+.event-table .active-row td,
+.event-table tr:target td {
+  background: color-mix(in srgb, var(--cl-accent) 12%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--cl-accent) 40%, transparent);
+  outline-offset: -1px;
+}
 .event-table td:first-child,
 .event-table th:first-child { width: 4.5rem; }
 .history-table td:nth-child(4),

@@ -68,7 +68,7 @@
                 <div class="notification-list" data-notification-list>
                     {% if pending is defined and pending %}
                         {% for event in pending %}
-                            <a href="/#event-{{ event.event_id }}"
+                            <a href="/queue#event-{{ event.event_id }}"
                                data-notification-item
                                data-target-id="event-{{ event.event_id }}"
                                data-event-id="{{ event.event_id }}"
