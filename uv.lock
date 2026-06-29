@@ -820,7 +820,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "rich", specifier = ">=14" },
     { name = "rich-click", specifier = ">=1.9.7" },
-    { name = "voidcrawl", directory = "/home/andrew/Desktop/cl/VoidCrawl" },
+    { name = "voidcrawl", directory = "../VoidCrawl" },
 ]
 
 [package.metadata.requires-dev]
@@ -1395,7 +1395,7 @@ wheels = [
 [[package]]
 name = "voidcrawl"
 version = "0.3.8.2"
-source = { directory = "/home/andrew/Desktop/cl/VoidCrawl" }
+source = { directory = "../VoidCrawl" }
 dependencies = [
     { name = "click" },
     { name = "pydantic" },

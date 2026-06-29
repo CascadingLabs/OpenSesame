@@ -19,8 +19,11 @@ dependencies = [
   "python-multipart>=0.0.32",
   "rich>=14",
   "rich-click>=1.9.7",
-  "voidcrawl @ file:///home/andrew/Desktop/cl/VoidCrawl",
+  "voidcrawl",
 ]
+
+[tool.uv.sources]
+voidcrawl = { path = "../VoidCrawl" }
 
 [project.scripts]
 opensesame = "opensesame.cli:main"
