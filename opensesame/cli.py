@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import importlib.metadata
 import json
+import os
 import webbrowser
 from pathlib import Path
 from typing import Any
 
 import rich_click as click
-import uvicorn
+from granian import Granian
+from granian.constants import Interfaces
 from rich.console import Console
 from rich.table import Table
 
@@ -21,13 +23,35 @@ from opensesame.demo import (
     run_demo,
 )
 from opensesame.events import TakeoverEvent
-from opensesame.server import create_app
 from opensesame.storage import DEFAULT_DB_PATH, TakeoverStore
 
 click.rich_click.TEXT_MARKUP = "rich"
 _CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"], "show_default": True}
 
 console = Console()
+
+
+def run_asgi_app(
+    *,
+    db_path: Path,
+    public_url: str,
+    notify: bool,
+    open_on_event: bool,
+    host: str,
+    port: int,
+) -> None:
+    os.environ["OPENSESAME_DB_PATH"] = str(db_path)
+    os.environ["OPENSESAME_PUBLIC_URL"] = public_url
+    os.environ["OPENSESAME_NOTIFY"] = "1" if notify else "0"
+    os.environ["OPENSESAME_OPEN_ON_EVENT"] = "1" if open_on_event else "0"
+    server = Granian(
+        "opensesame.server:create_app_from_env",
+        address=host,
+        port=port,
+        interface=Interfaces.ASGI,
+        factory=True,
+    )
+    server.serve()
 
 
 def package_version() -> str:
@@ -81,13 +105,11 @@ def serve(
     else:
         console.print(f"[bold green]OpenSesame[/] serving {url}")
         console.print(f"storage: [cyan]{db_path}[/]")
-    uvicorn.run(
-        create_app(
-            db_path,
-            public_url=url,
-            notify=notify,
-            open_on_event=open_on_event,
-        ),
+    run_asgi_app(
+        db_path=db_path,
+        public_url=url,
+        notify=notify,
+        open_on_event=open_on_event,
         host=host,
         port=port,
     )
@@ -111,8 +133,11 @@ def watch(ctx: click.Context, host: str, port: int, db_path: Path) -> None:
     else:
         console.print(f"opening [link={url}]{url}[/link]")
     webbrowser.open(url)
-    uvicorn.run(
-        create_app(db_path, public_url=url, notify=True, open_on_event=True),
+    run_asgi_app(
+        db_path=db_path,
+        public_url=url,
+        notify=True,
+        open_on_event=True,
         host=host,
         port=port,
     )
@@ -136,6 +161,7 @@ def demo() -> None:
 @click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)
 @click.option("--novnc-url", default=DEFAULT_NOVNC_URL)
 @click.option("--vnc-url", default=DEFAULT_VNC_URL)
+@click.option("--timeout", default=15.0, type=float, help="Navigation timeout seconds.")
 @click.option("--open-ui", is_flag=True, help="Open OpenSesame immediately.")
 @click.option(
     "--ui-prompt/--no-ui-prompt",
@@ -159,6 +185,7 @@ def demo_run(
     docker_version_url: str,
     novnc_url: str,
     vnc_url: str,
+    timeout: float,
     open_ui: bool,
     ui_prompt: bool,
     db_path: Path,
@@ -174,6 +201,7 @@ def demo_run(
                 "opensesame_url": opensesame_url,
                 "db": str(db_path),
                 "docker_headful": docker_headful,
+                "timeout": timeout,
                 "open_ui": open_ui,
                 "ui_prompt": ui_prompt,
             }
@@ -189,6 +217,7 @@ def demo_run(
             docker_version_url=docker_version_url,
             novnc_url=novnc_url,
             vnc_url=vnc_url,
+            timeout=timeout,
             open_ui=open_ui,
             ui_prompt=ui_prompt,
         )
@@ -209,6 +238,7 @@ def demo_options(fn: Any) -> Any:
     )(fn)
     fn = click.option("--novnc-url", default=DEFAULT_NOVNC_URL)(fn)
     fn = click.option("--vnc-url", default=DEFAULT_VNC_URL)(fn)
+    fn = click.option("--timeout", default=15.0, type=float)(fn)
     fn = click.option(
         "--open-ui", is_flag=True, help="Open OpenSesame immediately."
     )(fn)
@@ -236,6 +266,7 @@ def invoke_demo(
     docker_version_url: str,
     novnc_url: str,
     vnc_url: str,
+    timeout: float,
     open_ui: bool,
     ui_prompt: bool,
     db_path: Path,
@@ -250,6 +281,7 @@ def invoke_demo(
         docker_version_url=docker_version_url,
         novnc_url=novnc_url,
         vnc_url=vnc_url,
+        timeout=timeout,
         open_ui=open_ui,
         ui_prompt=ui_prompt,
         db_path=db_path,

@@ -124,9 +124,21 @@ async def run_demo(
             response = None
             nav_error = str(exc)
             console.print(f"[yellow]navigation did not fully settle:[/] {nav_error}")
-        captcha = await page.detect_captcha()
-        final_url = await page.url()
-        target_id = await page.target_id()
+        try:
+            captcha = await asyncio.wait_for(page.detect_captcha(), timeout=3.0)
+        except Exception as exc:  # pragma: no cover - demo resilience
+            captcha = None
+            console.print(f"[yellow]captcha probe did not complete:[/] {exc}")
+        try:
+            final_url = await page.url()
+        except Exception as exc:  # pragma: no cover - demo resilience
+            final_url = target_url
+            console.print(f"[yellow]page URL unavailable:[/] {exc}")
+        try:
+            target_id = await page.target_id()
+        except Exception as exc:  # pragma: no cover - demo resilience
+            target_id = None
+            console.print(f"[yellow]target id unavailable:[/] {exc}")
         websocket_url = await browser.websocket_url()
         event_id = f"demo-{challenge_type}-{target_id or 'takeover'}"
         captcha_kind = str(captcha) if captcha else challenge_type
@@ -177,10 +189,18 @@ async def run_demo(
             await page.wait_for_network_idle(timeout=5.0)
         except Exception as exc:  # pragma: no cover - diagnostic only
             console.print(f"[yellow]network idle wait did not complete:[/] {exc}")
-        captcha_after = await page.detect_captcha()
+        try:
+            captcha_after = await asyncio.wait_for(page.detect_captcha(), timeout=3.0)
+        except Exception as exc:  # pragma: no cover - demo resilience
+            captcha_after = None
+            console.print(f"[yellow]final captcha probe did not complete:[/] {exc}")
         console.print(
             "[green]resolved[/]"
             if captcha_after is None
             else "[yellow]marked resolved, captcha still detected[/]"
         )
-        console.print(f"final url: {await page.url()}")
+        try:
+            final_after_url = await page.url()
+        except Exception as exc:  # pragma: no cover - browser may close on teardown
+            final_after_url = f"unavailable: {exc}"
+        console.print(f"final url: {final_after_url}")

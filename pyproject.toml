@@ -12,13 +12,13 @@ license = { text = "Apache-2.0" }
 dependencies = [
   "aiosqlite>=0.21",
   "click>=8.3",
-  "fastapi>=0.116",
+  "fastapi>=0.138.1",
+  "granian>=2",
   "jinja2>=3.1",
   "pydantic>=2",
-  "python-multipart>=0.0.20",
+  "python-multipart>=0.0.32",
   "rich>=14",
   "rich-click>=1.9.7",
-  "uvicorn[standard]>=0.35",
   "voidcrawl @ file:///home/andrew/Desktop/cl/VoidCrawl",
 ]
 
@@ -32,6 +32,7 @@ dev = [
   "httpx2>=0.28.1",
   "httpx2>=0.28",
   "mypy>=1.15",
+  "pytest-cov>=7",
   "pytest>=8",
   "pytest-asyncio>=1",
   "ruff>=0.9",
@@ -71,3 +72,16 @@ profile = "jinja"
 extension = "html"
 ignore = "H006,H021"
 include = "opensesame/frontend/templates"
+
+[tool.coverage.run]
+branch = true
+source = ["opensesame"]
+omit = [
+  "opensesame/cli.py",
+  "opensesame/demo.py",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = true

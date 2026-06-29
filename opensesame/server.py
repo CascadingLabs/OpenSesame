@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -24,4 +25,14 @@ def create_app(
             notify=notify,
             open_on_event=open_on_event,
         )
+    )
+
+
+def create_app_from_env() -> FastAPI:
+    """Create the app from environment for Granian's importable factory."""
+    return create_app(
+        os.environ.get("OPENSESAME_DB_PATH", str(DEFAULT_DB_PATH)),
+        public_url=os.environ.get("OPENSESAME_PUBLIC_URL", "http://127.0.0.1:8765"),
+        notify=os.environ.get("OPENSESAME_NOTIFY", "1") == "1",
+        open_on_event=os.environ.get("OPENSESAME_OPEN_ON_EVENT", "1") == "1",
     )
