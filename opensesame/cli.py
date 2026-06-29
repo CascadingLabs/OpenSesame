@@ -17,11 +17,16 @@ from rich.console import Console
 from rich.table import Table
 
 from opensesame.demo import (
+    CLOUDFLARE_DEMO_TARGETS,
+    CLOUDFLARE_TYPE_TARGETS,
     DEFAULT_DOCKER_CDP_VERSION_URL,
     DEFAULT_NOVNC_URL,
     DEFAULT_OPENSESAME_URL,
     DEFAULT_VNC_URL,
+    DEMO_ARM_TARGETS,
     DEMO_TARGETS,
+    RECAPTCHA_DEMO_TARGETS,
+    RECAPTCHA_TYPE_TARGETS,
     arm_all_demo_events,
     run_demo,
 )
@@ -291,6 +296,28 @@ def demo_options(fn: Any) -> Any:
     return fn
 
 
+def family_stress_options(fn: Any) -> Any:
+    fn = click.option(
+        "--all",
+        "all_variants",
+        "-A",
+        is_flag=True,
+        help="Queue every variant in this family as a stress test.",
+    )(fn)
+    fn = click.option(
+        "--concurrency",
+        default=6,
+        type=click.IntRange(1, 19),
+        help="Number of concurrent tabs to arm when --all is set.",
+    )(fn)
+    fn = click.option(
+        "--keep-ui/--exit-after-all",
+        default=True,
+        help="Keep the started OpenSesame UI running after queueing captures.",
+    )(fn)
+    return fn
+
+
 def invoke_demo(
     ctx: click.Context,
     challenge_type: str,
@@ -325,12 +352,89 @@ def invoke_demo(
     )
 
 
+def invoke_demo_stress(
+    ctx: click.Context,
+    *,
+    group: str,
+    target_names: tuple[str, ...],
+    opensesame_url: str,
+    port: int,
+    docker_headful: bool,
+    docker_version_url: str,
+    novnc_url: str,
+    vnc_url: str,
+    timeout: float,
+    serve_ui: bool,
+    open_ui: bool,
+    ui_prompt: bool,
+    db_path: Path,
+    concurrency: int,
+    keep_ui: bool,
+    url: str | None = None,
+) -> None:
+    if url is not None:
+        raise click.ClickException("--url cannot be combined with --all/-A")
+    if wants_json(ctx):
+        echo_json(
+            {
+                "event": "demo_group_start",
+                "group": group,
+                "count": len(target_names),
+                "opensesame_url": opensesame_url,
+                "db": str(db_path),
+                "keep_ui": keep_ui,
+                "concurrency": concurrency,
+            }
+        )
+    asyncio.run(
+        arm_all_demo_events(
+            db_path=db_path,
+            opensesame_url=opensesame_url,
+            port=port,
+            docker_headful=docker_headful,
+            docker_version_url=docker_version_url,
+            novnc_url=novnc_url,
+            vnc_url=vnc_url,
+            timeout=timeout,
+            serve_ui=serve_ui,
+            open_ui=open_ui,
+            keep_ui=keep_ui,
+            concurrency=concurrency,
+            target_names=target_names,
+        )
+    )
+
+
 @demo.command("cloudflare")
+@click.argument(
+    "variant",
+    required=False,
+    type=click.Choice(sorted(CLOUDFLARE_TYPE_TARGETS)),
+)
+@family_stress_options
 @demo_options
 @click.pass_context
-def demo_cloudflare(ctx: click.Context, /, **kwargs: Any) -> None:
-    """Run the Cloudflare Turnstile takeover demo."""
-    invoke_demo(ctx, "cloudflare", **kwargs)
+def demo_cloudflare(
+    ctx: click.Context,
+    /,
+    variant: str | None,
+    all_variants: bool,
+    concurrency: int,
+    keep_ui: bool,
+    **kwargs: Any,
+) -> None:
+    """Run Cloudflare Turnstile/Managed Challenge takeover demos."""
+    if all_variants:
+        invoke_demo_stress(
+            ctx,
+            group="cloudflare",
+            target_names=CLOUDFLARE_DEMO_TARGETS,
+            concurrency=concurrency,
+            keep_ui=keep_ui,
+            **kwargs,
+        )
+        return
+    invoke_demo(ctx, CLOUDFLARE_TYPE_TARGETS[variant or "turnstile"], **kwargs)
 
 
 @demo.command("turnstile")
@@ -338,15 +442,53 @@ def demo_cloudflare(ctx: click.Context, /, **kwargs: Any) -> None:
 @click.pass_context
 def demo_turnstile(ctx: click.Context, /, **kwargs: Any) -> None:
     """Run the Cloudflare Turnstile takeover demo."""
-    invoke_demo(ctx, "turnstile", **kwargs)
+    invoke_demo(ctx, "cloudflare-turnstile", **kwargs)
 
 
 @demo.command("recaptcha")
+@click.argument(
+    "variant",
+    required=False,
+    type=click.Choice(sorted(RECAPTCHA_TYPE_TARGETS)),
+)
+@family_stress_options
 @demo_options
 @click.pass_context
-def demo_recaptcha(ctx: click.Context, /, **kwargs: Any) -> None:
-    """Run the reCAPTCHA v2 takeover demo."""
-    invoke_demo(ctx, "recaptcha", **kwargs)
+def demo_recaptcha(
+    ctx: click.Context,
+    /,
+    variant: str | None,
+    all_variants: bool,
+    concurrency: int,
+    keep_ui: bool,
+    **kwargs: Any,
+) -> None:
+    """Run reCAPTCHA v2/v3 takeover demos."""
+    if all_variants:
+        invoke_demo_stress(
+            ctx,
+            group="recaptcha",
+            target_names=RECAPTCHA_DEMO_TARGETS,
+            concurrency=concurrency,
+            keep_ui=keep_ui,
+            **kwargs,
+        )
+        return
+    invoke_demo(ctx, RECAPTCHA_TYPE_TARGETS[variant or "v2"], **kwargs)
+
+
+@demo.command("datadome")
+@click.argument("variant", required=False)
+@click.option("--all", "all_variants", "-A", is_flag=True)
+@click.pass_context
+def demo_datadome(
+    ctx: click.Context, /, variant: str | None, all_variants: bool
+) -> None:
+    """Report DataDome demo readiness."""
+    raise click.ClickException(
+        "No durable DataDome demo target is registered yet. Keep DataDome on the "
+        "anti-bot routing track until there is an owned or respectful fixture."
+    )
 
 
 @demo.command("mtcaptcha")
@@ -405,7 +547,7 @@ def demo_arm_all(
         echo_json(
             {
                 "event": "demo_all_start",
-                "count": len(DEMO_TARGETS),
+                "count": len(DEMO_ARM_TARGETS),
                 "opensesame_url": opensesame_url,
                 "db": str(db_path),
                 "keep_ui": keep_ui,
@@ -426,6 +568,7 @@ def demo_arm_all(
             serve_ui=serve_ui,
             open_ui=open_ui,
             keep_ui=keep_ui,
+            target_names=DEMO_ARM_TARGETS,
         )
     )
 

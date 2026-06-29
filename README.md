@@ -56,8 +56,21 @@ uv run opensesame serve
 
 # terminal 3: launch VoidCrawl to a demo site, send interrupt to OpenSesame,
 # and wait for the UI resolution button
-uv run opensesame demo cloudflare
+uv run opensesame demo cloudflare turnstile
+uv run opensesame demo cloudflare managed
+uv run opensesame demo recaptcha v2
+uv run opensesame demo recaptcha v3-enterprise
 ```
+
+Use `--all`/`-A` on the family commands to queue a focused stress-test set:
+
+```bash
+uv run opensesame demo cloudflare -A
+uv run opensesame demo recaptcha -A
+```
+
+DataDome intentionally has no demo target yet; `opensesame demo datadome` reports
+that it needs an owned or respectful fixture before it joins the MPP demo set.
 
 Then open `http://127.0.0.1:8765`, click into VNC/noVNC, solve the challenge,
 and press **Mark resolved** in OpenSesame. The demo command re-probes the same
@@ -78,8 +91,8 @@ uv run opensesame demo mtcaptcha --open-ui
 This sends the same VoidCrawl tab to OpenSesame, lets a human clear the
 MTCaptcha challenge in noVNC/VNC, then resumes automation and re-probes the page.
 
-To queue every demo capture as pending work for frontend stress testing, without
-solving any of them:
+To queue the focused MPP demo set, reCAPTCHA plus Cloudflare, as pending work for
+frontend stress testing without solving any of them:
 
 ```bash
 # terminal 1, from ../VoidCrawl
@@ -89,13 +102,11 @@ solving any of them:
 uv run opensesame demo all
 ```
 
-`all` covers the 2Captcha demo set plus one representative XCaptcha variant.
-XCaptcha variants share one site session, so solving one can clear the rest; the
-other variants stay available as individual `opensesame demo run xcaptcha-*`
-targets. `all` opens concurrent tabs in one VoidCrawl browser session, queues
-the resulting browser states in OpenSesame, and does not auto-open the dashboard.
+`all` opens concurrent tabs in one VoidCrawl browser session, queues the
+resulting browser states in OpenSesame, and does not auto-open the dashboard.
 Open `http://127.0.0.1:8765` yourself when ready. Use Ctrl-C when done or pass
-`--exit-after-all` if an existing UI is already up.
+`--exit-after-all` if an existing UI is already up. Extraneous capture families
+remain available through `opensesame demo run <target>` for ad hoc testing.
 
 ## Development
 

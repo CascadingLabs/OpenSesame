@@ -20,6 +20,8 @@ from opensesame.storage import DEFAULT_DB_PATH, TakeoverStore
 DEMO_TARGETS = {
     "clickcaptcha": "https://2captcha.com/demo/clickcaptcha",
     "cloudflare": "https://2captcha.com/demo/cloudflare-turnstile",
+    "cloudflare-managed": "https://2captcha.com/demo/cloudflare-turnstile-challenge",
+    "cloudflare-turnstile": "https://2captcha.com/demo/cloudflare-turnstile",
     "geetest": "https://2captcha.com/demo/geetest",
     "geetest-v4": "https://2captcha.com/demo/geetest-v4",
     "lemin": "https://2captcha.com/demo/lemin",
@@ -41,6 +43,24 @@ DEMO_TARGETS = {
     "xcaptcha-text-click-v2": "https://xcaptcha.com/demo",
 }
 
+RECAPTCHA_TYPE_TARGETS = {
+    "v2": "recaptcha-v2",
+    "v2-callback": "recaptcha-v2-callback",
+    "v2-enterprise": "recaptcha-v2-enterprise",
+    "v2-invisible": "recaptcha-v2-invisible",
+    "v3": "recaptcha-v3",
+    "v3-enterprise": "recaptcha-v3-enterprise",
+}
+RECAPTCHA_DEMO_TARGETS = tuple(RECAPTCHA_TYPE_TARGETS.values())
+
+CLOUDFLARE_TYPE_TARGETS = {
+    "turnstile": "cloudflare-turnstile",
+    "widget": "cloudflare-turnstile",
+    "managed": "cloudflare-managed",
+    "challenge": "cloudflare-managed",
+}
+CLOUDFLARE_DEMO_TARGETS = ("cloudflare-turnstile", "cloudflare-managed")
+
 
 def xcaptcha_button(sitekey: str) -> str:
     return f'button[data-captcha-sitekey="{sitekey}"]'
@@ -52,28 +72,7 @@ DEMO_PREPARE_SELECTORS = {
     "xcaptcha-text-click-v1": xcaptcha_button("5b4fc1a221c3e79c9bac190363808884"),
     "xcaptcha-text-click-v2": xcaptcha_button("11aa62606fb968f3674742df60598957"),
 }
-DEMO_ARM_TARGETS = (
-    "recaptcha-v2",
-    "recaptcha-v2-invisible",
-    "recaptcha-v2-callback",
-    "recaptcha-v2-enterprise",
-    "recaptcha-v3",
-    "recaptcha-v3-enterprise",
-    "normal",
-    "text",
-    "clickcaptcha",
-    "cloudflare",
-    "mtcaptcha",
-    "geetest",
-    "geetest-v4",
-    "lemin",
-    "rotatecaptcha",
-    # XCaptcha demos share one site session; solving any variant clears the rest.
-    # Keep one representative in `demo all` so the queue does not pretend these
-    # are independent live challenges. Individual variants remain runnable via
-    # `opensesame demo run xcaptcha-*`.
-    "xcaptcha-text-click-v1",
-)
+DEMO_ARM_TARGETS = RECAPTCHA_DEMO_TARGETS + CLOUDFLARE_DEMO_TARGETS
 DEFAULT_URL = DEMO_TARGETS["cloudflare"]
 DEFAULT_OPENSESAME_URL = "http://127.0.0.1:8765"
 DEFAULT_NOVNC_URL = "http://127.0.0.1:6080"
@@ -380,8 +379,9 @@ async def arm_all_demo_events(
     open_ui: bool = False,
     keep_ui: bool = True,
     concurrency: int = 6,
+    target_names: tuple[str, ...] = DEMO_ARM_TARGETS,
 ) -> None:
-    """Queue every demo target as concurrent tabs in one browser session."""
+    """Queue demo targets as concurrent tabs in one browser session."""
     store = TakeoverStore(db_path)
     await store.init()
     server_process = (
@@ -444,12 +444,12 @@ async def arm_all_demo_events(
     try:
         async with BrowserSession(config) as browser:
             pages = {
-                name: await browser.new_page("about:blank") for name in DEMO_ARM_TARGETS
+                name: await browser.new_page("about:blank") for name in target_names
             }
             semaphore = asyncio.Semaphore(max(1, concurrency))
             tasks = (
                 limited_arm_one(browser, semaphore, name, pages[name])
-                for name in DEMO_ARM_TARGETS
+                for name in target_names
             )
             await asyncio.gather(*tasks)
         if server_process is not None and keep_ui:

@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from opensesame import cli, demo
 
@@ -13,11 +14,130 @@ def test_requested_demo_targets_are_registered():
     assert demo.DEMO_TARGETS["recaptcha-v3-enterprise"].endswith(
         "/recaptcha-v3-enterprise"
     )
+    assert demo.DEMO_TARGETS["cloudflare-managed"].endswith(
+        "/cloudflare-turnstile-challenge"
+    )
     assert demo.DEMO_TARGETS["xcaptcha-moving"] == "https://xcaptcha.com/demo"
-    assert len(demo.DEMO_ARM_TARGETS) == 16
-    assert [n for n in demo.DEMO_ARM_TARGETS if n.startswith("xcaptcha-")] == [
-        "xcaptcha-text-click-v1"
+    assert demo.DEMO_ARM_TARGETS == (
+        demo.RECAPTCHA_DEMO_TARGETS + demo.CLOUDFLARE_DEMO_TARGETS
+    )
+    assert [n for n in demo.DEMO_ARM_TARGETS if n.startswith("xcaptcha-")] == []
+
+
+@pytest.mark.parametrize(
+    ("variant", "target"),
+    [
+        ("turnstile", "cloudflare-turnstile"),
+        ("widget", "cloudflare-turnstile"),
+        ("managed", "cloudflare-managed"),
+        ("challenge", "cloudflare-managed"),
+    ],
+)
+def test_cloudflare_demo_variants_route_to_focused_targets(
+    monkeypatch, variant: str, target: str
+):
+    calls: list[dict[str, object]] = []
+
+    async def fake_run_demo(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run_demo", fake_run_demo)
+
+    result = CliRunner().invoke(
+        cli.main,
+        ["demo", "cloudflare", variant, "--no-serve-ui", "--no-ui-prompt"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[-1]["challenge_type"] == target
+
+
+@pytest.mark.parametrize(
+    ("variant", "target"), sorted(demo.RECAPTCHA_TYPE_TARGETS.items())
+)
+def test_recaptcha_demo_variants_route_to_focused_targets(
+    monkeypatch, variant: str, target: str
+):
+    calls: list[dict[str, object]] = []
+
+    async def fake_run_demo(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run_demo", fake_run_demo)
+
+    result = CliRunner().invoke(
+        cli.main,
+        ["demo", "recaptcha", variant, "--no-serve-ui", "--no-ui-prompt"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[-1]["challenge_type"] == target
+
+
+def test_family_demo_defaults_route_to_primary_targets(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    async def fake_run_demo(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run_demo", fake_run_demo)
+
+    cloudflare = CliRunner().invoke(
+        cli.main, ["demo", "cloudflare", "--no-serve-ui", "--no-ui-prompt"]
+    )
+    recaptcha = CliRunner().invoke(
+        cli.main, ["demo", "recaptcha", "--no-serve-ui", "--no-ui-prompt"]
+    )
+
+    assert cloudflare.exit_code == 0, cloudflare.output
+    assert recaptcha.exit_code == 0, recaptcha.output
+    assert [call["challenge_type"] for call in calls] == [
+        "cloudflare-turnstile",
+        "recaptcha-v2",
     ]
+
+
+def test_datadome_demo_is_explicitly_not_registered():
+    result = CliRunner().invoke(cli.main, ["demo", "datadome", "-A"])
+
+    assert result.exit_code != 0
+    assert "No durable DataDome demo target is registered yet" in result.output
+
+
+@pytest.mark.parametrize(
+    ("family", "expected_targets"),
+    [
+        ("cloudflare", demo.CLOUDFLARE_DEMO_TARGETS),
+        ("recaptcha", demo.RECAPTCHA_DEMO_TARGETS),
+    ],
+)
+def test_family_demo_all_queues_only_family_targets(
+    monkeypatch, family: str, expected_targets: tuple[str, ...]
+):
+    calls: list[dict[str, object]] = []
+
+    async def fake_arm_all_demo_events(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "arm_all_demo_events", fake_arm_all_demo_events)
+
+    result = CliRunner().invoke(
+        cli.main,
+        [
+            "demo",
+            family,
+            "-A",
+            "--exit-after-all",
+            "--no-serve-ui",
+            "--concurrency",
+            "2",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls[-1]["target_names"] == expected_targets
+    assert calls[-1]["concurrency"] == 2
+    assert calls[-1]["keep_ui"] is False
 
 
 def test_xcaptcha_demo_targets_have_prepare_clicks():
