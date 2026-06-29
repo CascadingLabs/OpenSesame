@@ -50,17 +50,24 @@ def browser_config(
     return BrowserConfig(headless=False, port=port)
 
 
-def antibot_to_dict(response: Any) -> dict[str, Any] | None:
-    antibot = getattr(response, "antibot", None)
-    if antibot is None:
-        return None
-    return {
-        "vendors": list(getattr(antibot, "vendors", []) or []),
-        "challenged": bool(getattr(antibot, "challenged", False)),
-        "challenge_vendor": getattr(antibot, "challenge_vendor", None),
-        "corpus_version": getattr(antibot, "corpus_version", None),
-        "evidence": getattr(antibot, "evidence", None),
-    }
+async def capture_voidcrawl_challenge(
+    *,
+    browser: BrowserSession,
+    page: Any,
+    session_id: str,
+    vnc_url: str,
+    novnc_url: str,
+) -> dict[str, Any]:
+    websocket_url = await browser.websocket_url()
+    capture = await page.capture_challenge(
+        websocket_url=websocket_url,
+        session_id=session_id,
+        vnc_url=vnc_url,
+        novnc_url=novnc_url,
+    )
+    if not isinstance(capture, dict) or not isinstance(capture.get("challenge"), dict):
+        raise RuntimeError("VoidCrawl returned an invalid challenge capture envelope")
+    return capture
 
 
 async def should_open_ui(ui_prompt: bool) -> bool:
@@ -218,60 +225,29 @@ async def drive_demo_browser(
         page = await browser.new_page("about:blank")
         nav_error: str | None = None
         try:
-            response = await page.goto(target_url, timeout=timeout)
+            await page.goto(target_url, timeout=timeout)
         except Exception as exc:  # pragma: no cover - depends on demo site timing
-            response = None
             nav_error = str(exc)
             console.print(f"[yellow]navigation did not fully settle:[/] {nav_error}")
-        try:
-            captcha = await asyncio.wait_for(page.detect_captcha(), timeout=3.0)
-        except Exception as exc:  # pragma: no cover - demo resilience
-            captcha = None
-            console.print(f"[yellow]captcha probe did not complete:[/] {exc}")
-        try:
-            final_url = await page.url()
-        except Exception as exc:  # pragma: no cover - demo resilience
-            final_url = target_url
-            console.print(f"[yellow]page URL unavailable:[/] {exc}")
-        try:
-            target_id = await page.target_id()
-        except Exception as exc:  # pragma: no cover - demo resilience
-            target_id = None
-            console.print(f"[yellow]target id unavailable:[/] {exc}")
-        websocket_url = await browser.websocket_url()
-        event_suffix = target_id or uuid4().hex[:12]
-        event_id = f"demo-{challenge_type}-{event_suffix}"
-        captcha_kind = str(captcha) if captcha else challenge_type
+        capture_payload = await capture_voidcrawl_challenge(
+            browser=browser,
+            page=page,
+            session_id="opensesame-demo",
+            vnc_url=vnc_url,
+            novnc_url=novnc_url,
+        )
+        challenge = capture_payload["challenge"]
+        if nav_error and not challenge.get("ax_summary"):
+            challenge["ax_summary"] = nav_error
+        if not challenge.get("blocking"):
+            console.print(f"[yellow]{capture_payload.get('operator_hint')}[/]")
+            return
+        event_id = str(challenge.get("event_id") or uuid4())
 
-        capture_payload = {
-            "operator_hint": "Open VNC/noVNC, solve in-place, then mark resolved.",
-            "challenge": {
-                "event_id": event_id,
-                "url": final_url,
-                "status_code": getattr(response, "status_code", None),
-                "status": "active",
-                "blocking": True,
-                "antibot": antibot_to_dict(response),
-                "dom_captcha": {
-                    "kind": captcha_kind,
-                    "page_url": final_url,
-                    "active": True,
-                    "widget_rendered": captcha is not None,
-                },
-                "ax_summary": nav_error,
-                "attach_coordinates": {
-                    "websocket_url": websocket_url,
-                    "target_id": target_id,
-                    "session_id": "opensesame-demo",
-                    "vnc_url": vnc_url,
-                    "novnc_url": novnc_url,
-                },
-            },
-        }
         endpoint = f"{opensesame_url.rstrip('/')}/api/voidcrawl/challenge"
         await asyncio.to_thread(post_json, endpoint, capture_payload)
 
-        console.print(f"[green]sent interrupt[/] {event_id} -> {endpoint}")
+        console.print(f"[green]sent VoidCrawl interrupt[/] {event_id} -> {endpoint}")
         console.print(
             f"Open OpenSesame: [link={opensesame_url}]{opensesame_url}[/link]"
         )

@@ -5,15 +5,16 @@ import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from opensesame.events import TakeoverEventCreate
+from opensesame.events import TakeoverEvent, TakeoverEventCreate
 from opensesame.notify import notify_takeover, open_operator
 from opensesame.storage import DEFAULT_DB_PATH, TakeoverStore
 from opensesame.voidcrawl import VoidCrawlChallengeEnvelope, takeover_from_voidcrawl
@@ -22,6 +23,8 @@ PACKAGE_DIR = Path(__file__).parent
 TEMPLATES = Jinja2Templates(directory=str(PACKAGE_DIR / "templates"))
 NoteForm = Annotated[str | None, Form()]
 ResolverForm = Annotated[str, Form()]
+PageQuery = Annotated[int, Query(ge=1)]
+PerPageQuery = Annotated[int, Query(ge=1, le=100)]
 
 
 @dataclass(frozen=True)
@@ -106,16 +109,92 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
             {"events": events, "pending": pending, "resolved_count": len(resolved)},
         )
 
+    def queue_sort_key(event: TakeoverEvent, sort: str) -> object:
+        if sort == "oldest":
+            return event.created_at
+        if sort == "kind":
+            return event.captcha_kind or event.challenge_vendor or "challenge"
+        if sort == "session":
+            return event.session_id
+        return event.created_at
+
+    def queue_group_key(event: TakeoverEvent, group: str) -> str:
+        if group == "kind":
+            return str(event.captcha_kind or event.challenge_vendor or "challenge")
+        if group == "session":
+            return str(event.session_id)
+        return "Pending queue"
+
+    @app.get("/queue", response_class=HTMLResponse)
+    async def queue(
+        request: Request,
+        sort: Annotated[
+            str, Query(pattern="^(newest|oldest|kind|session)$")
+        ] = "newest",
+        group: Annotated[str, Query(pattern="^(none|kind|session)$")] = "none",
+    ) -> HTMLResponse:
+        pending = await store.list_events("pending")
+        reverse = sort == "newest"
+        sorted_pending = sorted(
+            pending, key=lambda event: queue_sort_key(event, sort), reverse=reverse
+        )
+        if group == "none":
+            groups = [("Pending queue", sorted_pending)]
+        else:
+            grouped_source = sorted(
+                sorted_pending, key=lambda event: queue_group_key(event, group)
+            )
+            groups = [
+                (label, list(events))
+                for label, events in groupby(
+                    grouped_source, key=lambda event: queue_group_key(event, group)
+                )
+            ]
+        resolved_count = await store.count_events(exclude_status="pending")
+        return TEMPLATES.TemplateResponse(
+            request,
+            "queue.html",
+            {
+                "pending": pending,
+                "queue_events": sorted_pending,
+                "queue_groups": groups,
+                "pending_count": len(pending),
+                "resolved_count": resolved_count,
+                "sort": sort,
+                "group": group,
+            },
+        )
+
     @app.get("/history", response_class=HTMLResponse)
-    async def history(request: Request) -> HTMLResponse:
-        events = await store.list_events()
-        resolved = [event for event in events if event.status != "pending"]
-        pending_count = sum(1 for event in events if event.status == "pending")
-        pending = [event for event in events if event.status == "pending"]
+    async def history(
+        request: Request, page: PageQuery = 1, per_page: PerPageQuery = 50
+    ) -> HTMLResponse:
+        resolved_count = await store.count_events(exclude_status="pending")
+        total_pages = max(1, (resolved_count + per_page - 1) // per_page)
+        current_page = min(page, total_pages)
+        resolved_events = await store.list_events(
+            exclude_status="pending",
+            limit=per_page,
+            offset=(current_page - 1) * per_page,
+        )
+        pending_count = await store.count_events("pending")
+        pending = await store.list_events("pending", limit=5)
         return TEMPLATES.TemplateResponse(
             request,
             "history.html",
-            {"resolved": resolved, "pending": pending, "pending_count": pending_count},
+            {
+                "resolved": resolved_events,
+                "resolved_count": resolved_count,
+                "pending": pending,
+                "pending_count": pending_count,
+                "page": current_page,
+                "per_page": per_page,
+                "total_pages": total_pages,
+                "has_prev": current_page > 1,
+                "has_next": current_page < total_pages,
+                "prev_page": current_page - 1,
+                "next_page": current_page + 1,
+            },
         )
 
     async def announce_takeover(request: Request, event_id: str) -> None:
@@ -143,6 +222,10 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
         await announce_takeover(request, takeover.event_id)
         return {"ok": True, "event": takeover.model_dump(mode="json")}
 
+    async def next_pending_target() -> str:
+        next_pending = await store.list_events("pending", limit=1)
+        return f"/#event-{next_pending[0].event_id}" if next_pending else "/#events"
+
     @app.get("/events/{event_id}/novnc", response_class=HTMLResponse)
     async def novnc_viewer(event_id: str, request: Request) -> HTMLResponse:
         event = await store.get_event(event_id)
@@ -152,19 +235,33 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="no noVNC URL for event")
         return TEMPLATES.TemplateResponse(request, "novnc.html", {"event": event})
 
+    @app.post("/events/resolve")
+    async def resolve_takeovers(request: Request) -> RedirectResponse:
+        form = await request.form()
+        event_ids = [str(value) for value in form.getlist("event_ids") if str(value)]
+        resolver = str(form.get("resolver") or "manual_novnc")
+        raw_note = form.get("note")
+        note = str(raw_note) if raw_note else None
+        resolved_events = await store.resolve_events(
+            event_ids, resolver=resolver, note=note
+        )
+        for event in resolved_events:
+            await broadcast_notifications("resolved", event.event_id)
+        return RedirectResponse(await next_pending_target(), status_code=303)
+
     @app.post("/events/{event_id}/resolve")
     async def resolve_takeover(
         event_id: str,
         note: NoteForm = None,
         resolver: ResolverForm = "manual_novnc",
     ) -> RedirectResponse:
-        event = await store.resolve_event(event_id, resolver=resolver, note=note)
+        event = await store.resolve_event(
+            event_id, resolver=resolver, note=note or None
+        )
         if event is None:
             raise HTTPException(status_code=404, detail="event not found")
         await broadcast_notifications("resolved", event_id)
-        next_pending = await store.list_events("pending")
-        target = f"/#event-{next_pending[0].event_id}" if next_pending else "/#events"
-        return RedirectResponse(target, status_code=303)
+        return RedirectResponse(await next_pending_target(), status_code=303)
 
     @app.get("/api/takeovers/{event_id}")
     async def get_takeover(event_id: str) -> dict[str, object]:

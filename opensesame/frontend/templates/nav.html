@@ -1,8 +1,11 @@
-{% if pending is defined %}
+{% if pending_count is defined %}
+    {% set nav_pending_count = pending_count %}
+{% elif pending is defined %}
     {% set nav_pending_count = pending | length %}
 {% else %}
-    {% set nav_pending_count = pending_count | default(0) %}
+    {% set nav_pending_count = 0 %}
 {% endif %}
+{% set nav_completed_count = resolved_count | default(0) %}
 <nav class="nav" aria-label="Primary">
     <a class="nav-brand"
        href="https://cascadinglabs.com/opensesame/"
@@ -19,6 +22,22 @@
              height="26"
              aria-hidden="true">
     </a>
+    <div class="nav-stats" aria-label="Queue stats">
+        <span class="nav-stat" title="Pending">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="M12 7v5l3 2"></path>
+            </svg>
+            <span>{{ nav_pending_count }}</span>
+        </span>
+        <span class="nav-stat" title="Completed">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="m8.5 12.5 2.2 2.2 4.8-5.2"></path>
+            </svg>
+            <span>{{ nav_completed_count }}</span>
+        </span>
+    </div>
     <div class="nav-actions">
         <div class="notification-popover">
             <button class="icon-link notification-link"
@@ -69,7 +88,13 @@
                 </div>
             </div>
         </div>
-        <a class="icon-link" href="/" aria-label="Queue" title="Queue">
+        <a class="icon-link" href="/" aria-label="Workbench" title="Workbench">
+            <span class="nav-icon home-icon" aria-hidden="true"></span>
+        </a>
+        <a class="icon-link"
+           href="{{ url_for('queue') }}"
+           aria-label="Queue"
+           title="Queue">
             <span class="nav-icon queue-icon" aria-hidden="true"></span>
         </a>
         <a class="icon-link"

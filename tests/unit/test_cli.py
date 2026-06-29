@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from opensesame import cli, demo
 
 
@@ -50,3 +52,36 @@ def test_demo_server_spawn_disables_hidden_open_prompt(monkeypatch):
     assert process is not None
     assert "--no-open-prompt" in spawned["command"]
     assert spawned["kwargs"]["stdin"] is subprocess.DEVNULL
+
+
+@pytest.mark.asyncio
+async def test_demo_uses_voidcrawl_capture_challenge_contract():
+    class FakeBrowser:
+        async def websocket_url(self) -> str:
+            return "ws://127.0.0.1/devtools/browser/demo"
+
+    class FakePage:
+        def __init__(self) -> None:
+            self.kwargs: dict[str, object] | None = None
+
+        async def capture_challenge(self, **kwargs: object) -> dict[str, object]:
+            self.kwargs = kwargs
+            return {"challenge": {"event_id": "event-1", "blocking": True}}
+
+    page = FakePage()
+
+    capture = await demo.capture_voidcrawl_challenge(
+        browser=FakeBrowser(),
+        page=page,
+        session_id="opensesame-demo",
+        vnc_url="vnc://127.0.0.1:5900",
+        novnc_url="http://127.0.0.1:6080",
+    )
+
+    assert capture["challenge"]["event_id"] == "event-1"
+    assert page.kwargs == {
+        "websocket_url": "ws://127.0.0.1/devtools/browser/demo",
+        "session_id": "opensesame-demo",
+        "vnc_url": "vnc://127.0.0.1:5900",
+        "novnc_url": "http://127.0.0.1:6080",
+    }

@@ -96,10 +96,11 @@ class TakeoverStore:
             pagination = " LIMIT ? OFFSET ?"
             params.extend([limit, offset])
         async with self.connect() as db:
-            cursor = await db.execute(
-                f"SELECT * FROM takeover_events {where} ORDER BY created_at DESC{pagination}",
-                tuple(params),
+            query = (
+                f"SELECT * FROM takeover_events {where} "
+                f"ORDER BY created_at DESC{pagination}"
             )
+            cursor = await db.execute(query, tuple(params))
             rows = await cursor.fetchall()
         return [_from_row(row) for row in rows]
 
@@ -121,6 +122,8 @@ class TakeoverStore:
                 f"SELECT COUNT(*) FROM takeover_events {where}", tuple(params)
             )
             row = await cursor.fetchone()
+        if row is None:
+            return 0
         return int(row[0])
 
     async def get_event(self, event_id: str) -> TakeoverEvent | None:

@@ -7,7 +7,7 @@
                 <div class="event-title">
                     <span class="badge">{{ pending | length }} pending</span>
                     <h2>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</h2>
-                    <span class="muted">Resolve this challenge to reveal the next pending takeover.</span>
+                    <span class="muted">Solve the active noVNC session, then mark it resolved or select rows below.</span>
                 </div>
                 <form class="resolve-form"
                       method="post"
@@ -16,13 +16,19 @@
                            value="{{ 'manual_novnc' if event.novnc_url else 'manual_vnc' }}"
                            hidden>
                     <input name="note" placeholder="note">
-                    <button type="submit">Mark resolved</button>
+                    <button type="submit">✓ Resolved</button>
                 </form>
             </div>
             {% if event.novnc_url %}
                 {% include "novnc.html" %}
             {% endif %}
         </section>
+        {% if pending | length > 1 %}
+            <div class="tray">
+                <span>{{ pending | length - 1 }} more pending takeover{{ '' if pending | length == 2 else 's' }} waiting behind this one.</span>
+                <a class="button" href="/queue">Manage queue</a>
+            </div>
+        {% endif %}
     </section>
 {% else %}
     <section class="empty-state" role="status" aria-live="polite">

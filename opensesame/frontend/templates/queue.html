@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="description"
+              content="OpenSesame pending takeover queue management.">
+        <meta name="keywords"
+              content="OpenSesame, VoidCrawl, Cascading Labs, queue, takeover">
+        <title>OpenSesame Queue</title>
+        {% include "theme-init.html" %}
+        <link rel="stylesheet" href="{{ url_for('static', path='global.css') }}">
+    </head>
+    <body>
+        {% include "nav.html" %}
+        <main>
+            <form class="queue-controls" method="get" action="{{ url_for('queue') }}">
+                <label>
+                    Sort
+                    <select name="sort">
+                        <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest first</option>
+                        <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest first</option>
+                        <option value="kind" {% if sort == "kind" %}selected{% endif %}>Kind/vendor</option>
+                        <option value="session" {% if sort == "session" %}selected{% endif %}>Session</option>
+                    </select>
+                </label>
+                <label>
+                    Group
+                    <select name="group">
+                        <option value="none" {% if group == "none" %}selected{% endif %}>None</option>
+                        <option value="kind" {% if group == "kind" %}selected{% endif %}>Kind/vendor</option>
+                        <option value="session" {% if group == "session" %}selected{% endif %}>Session</option>
+                    </select>
+                </label>
+                <button type="submit">Apply</button>
+            </form>
+            {% if queue_events %}
+                <form class="bulk-resolve-form queue-manager"
+                      method="post"
+                      action="{{ url_for('resolve_takeovers') }}">
+                    <div class="table-toolbar">
+                        <strong>Manage pending queue</strong>
+                        <span class="muted">Select one or more solved sessions.</span>
+                        <input name="resolver" value="manual_novnc" hidden>
+                        <input name="note" placeholder="bulk note">
+                        <button type="submit">✓ Mark selected resolved</button>
+                    </div>
+                    {% for group_label, grouped_events in queue_groups %}
+                        <section class="queue-group" aria-labelledby="queue-group-{{ loop.index }}">
+                            <div class="queue-group-head">
+                                <h2 id="queue-group-{{ loop.index }}">{{ group_label }}</h2>
+                                <span class="badge">{{ grouped_events | length }} item{{ '' if grouped_events | length == 1 else 's' }}</span>
+                            </div>
+                            <div class="table-scroll">
+                                <table class="event-table pending-table queue-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Select</th>
+                                            <th scope="col">Kind</th>
+                                            <th scope="col">Event</th>
+                                            <th scope="col">Session</th>
+                                            <th scope="col">URL</th>
+                                            <th scope="col">Created</th>
+                                            <th scope="col">Updated</th>
+                                            <th scope="col">Links</th>
+                                            <th scope="col">More</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for queued in grouped_events %}
+                                            {% set kind = queued.captcha_kind or queued.challenge_vendor or "challenge" %}
+                                            {% set short_event_id = queued.event_id[:18] ~ ("…" if queued.event_id | length > 18 else "") %}
+                                            <tr id="event-{{ queued.event_id }}"
+                                                class="{{ 'active-row' if loop.first and sort == 'newest' and group == 'none' else '' }}">
+                                                <td>
+                                                    <input type="checkbox"
+                                                           name="event_ids"
+                                                           value="{{ queued.event_id }}"
+                                                           aria-label="Select {{ queued.event_id }}">
+                                                </td>
+                                                <td>{{ kind }}</td>
+                                                <td><code class="event-id"
+      title="{{ queued.event_id }}"
+      data-tooltip="{{ queued.event_id }}">{{ short_event_id }}</code></td>
+                                                <td><code class="truncate"
+      title="{{ queued.session_id }}"
+      data-tooltip="{{ queued.session_id }}">{{ queued.session_id }}</code></td>
+                                                <td>
+                                                    {% if queued.url %}
+                                                        <a class="truncate"
+                                                           href="{{ queued.url }}"
+                                                           title="{{ queued.url }}"
+                                                           data-tooltip="{{ queued.url }}">{{ queued.url }}</a>
+                                                    {% else %}
+                                                        <span class="muted">—</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td><time datetime="{{ queued.created_at.isoformat() }}">{{ queued.created_at.strftime("%Y-%m-%d %H:%M") }}</time></td>
+                                                <td><time datetime="{{ queued.updated_at.isoformat() }}">{{ queued.updated_at.strftime("%Y-%m-%d %H:%M") }}</time></td>
+                                                <td>
+                                                    <div class="queue-row-links">
+                                                        <a href="/#event-{{ queued.event_id }}">Workbench</a>
+                                                        {% if queued.novnc_url %}
+                                                            <a href="{{ queued.novnc_url }}">noVNC</a>
+                                                        {% endif %}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <details class="row-more">
+                                                        <summary>More</summary>
+                                                        <dl>
+                                                            <dt>Status</dt>
+                                                            <dd>
+                                                                {{ queued.status }}
+                                                            </dd>
+                                                            {% if queued.title %}
+                                                                <dt>Title</dt>
+                                                                <dd>
+                                                                    {{ queued.title }}
+                                                                </dd>
+                                                            {% endif %}
+                                                            {% if queued.vnc_url %}
+                                                                <dt>Native VNC</dt>
+                                                                <dd>
+                                                                    <code>{{ queued.vnc_url }}</code>
+                                                                </dd>
+                                                            {% endif %}
+                                                            {% if queued.novnc_url %}
+                                                                <dt>noVNC</dt>
+                                                                <dd>
+                                                                    <a href="{{ queued.novnc_url }}">{{ queued.novnc_url }}</a>
+                                                                </dd>
+                                                            {% endif %}
+                                                            {% if queued.target_id %}
+                                                                <dt>Target</dt>
+                                                                <dd>
+                                                                    <code>{{ queued.target_id }}</code>
+                                                                </dd>
+                                                            {% endif %}
+                                                        </dl>
+                                                    </details>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    {% endfor %}
+                </form>
+            {% else %}
+                <section class="empty-state" role="status" aria-live="polite">
+                    <svg class="empty-state-svg"
+                         viewBox="0 0 220 160"
+                         role="img"
+                         aria-labelledby="queue-empty-title queue-empty-desc"
+                         xmlns="http://www.w3.org/2000/svg">
+                        <title id="queue-empty-title">Queue empty</title>
+                        <desc id="queue-empty-desc">A completed stack of cards with a check mark.</desc>
+                        <rect x="46" y="36" width="118" height="84" rx="14" fill="currentColor" opacity="0.08" />
+                        <rect x="58" y="26" width="118" height="84" rx="14" fill="currentColor" opacity="0.12" />
+                        <rect x="70" y="16" width="118" height="84" rx="14" fill="none" stroke="currentColor" stroke-width="6" />
+                        <path d="M98 59l21 20 43-48" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M38 129h144" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity="0.18" />
+                    </svg>
+                    <h2>Queue empty</h2>
+                    <p class="muted">No pending takeovers. New challenges will appear on the home workbench when they need attention.</p>
+                </section>
+            {% endif %}
+        </main>
+        {% include "theme-script.html" %}
+        {% include "notifications-script.html" %}
+    </body>
+</html>
