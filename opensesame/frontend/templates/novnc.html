@@ -1,0 +1,32 @@
+{% set separator = '&' if '?' in event.novnc_url else '?' %}
+{% set viewer_url = event.novnc_url ~ separator ~ 'autoconnect=1&resize=scale' %}
+<div class="novnc-panel"
+     id="novnc-panel-{{ event.event_id }}"
+     hx-preserve="true">
+    <div class="novnc-toolbar">
+        <strong>noVNC · {{ event.event_id }}</strong>
+        <span class="novnc-help">If blank, wait for Chrome/noVNC.</span>
+        <details class="event-details"
+                 id="event-details-{{ event.event_id }}"
+                 hx-preserve="true">
+            <summary>Links/meta</summary>
+            <div class="meta">
+                <p><strong>Event:</strong> <code>{{ event.event_id }}</code></p>
+                <p><strong>Session:</strong> <code>{{ event.session_id }}</code></p>
+                {% if event.url %}
+                    <p><strong>URL:</strong> <a href="{{ event.url }}">{{ event.url }}</a></p>
+                {% endif %}
+            </div>
+            <p class="links subtle-links">
+                <a href="{{ viewer_url }}" target="_blank" rel="noreferrer">Detached noVNC</a>
+                {% if event.vnc_url %}<a href="{{ event.vnc_url }}">Native VNC</a>{% endif %}
+            </p>
+        </details>
+        <a href="{{ viewer_url }}" target="_blank" rel="noreferrer">New tab</a>
+    </div>
+    <iframe id="novnc-frame-{{ event.event_id }}"
+            class="novnc-frame"
+            src="{{ viewer_url }}"
+            title="noVNC viewer for {{ event.event_id }}"
+            allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+</div>

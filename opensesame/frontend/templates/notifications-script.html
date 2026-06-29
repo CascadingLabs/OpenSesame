@@ -1,0 +1,121 @@
+<script>
+  (function () {
+    const badge = document.querySelector('[data-notification-badge]');
+    const tray = document.getElementById('notification-tray');
+    const list = document.querySelector('[data-notification-list]');
+    const trigger = document.querySelector('.notification-link');
+    if (!badge) return;
+
+    let pendingSnapshot = Array.from(list?.querySelectorAll('a[data-notification-item]') || []).map((link) => ({
+      id: link.dataset.targetId || (link.getAttribute('href') || '').replace(/^\/#/, ''),
+      title: link.dataset.title || link.querySelector('strong')?.textContent?.trim() || 'challenge',
+      code: link.dataset.eventId || link.querySelector('span[title]')?.getAttribute('title') || '',
+    })).filter((item) => item.id);
+
+    function pendingItems() {
+      return Array.from(document.querySelectorAll('.event.pending')).map((event) => {
+        const id = event.id || '';
+        const title = event.querySelector('h2')?.textContent?.trim() || 'challenge';
+        const code = event.querySelector('code')?.textContent?.trim() || id.replace(/^event-/, '');
+        return { id, title, code };
+      }).filter((item) => item.id);
+    }
+
+    function shortCode(value) {
+      return value.length > 22 ? `${value.slice(0, 22)}…` : value;
+    }
+
+    function renderList() {
+      if (!list) return;
+      const domItems = pendingItems();
+      const count = Number(badge.textContent || '0') || 0;
+      const items = pendingSnapshot.length >= count ? pendingSnapshot : domItems;
+      if (items.length === 0) {
+        if (Number(badge.textContent || '0') > 0 && list.querySelector('a[data-notification-item]')) return;
+        list.innerHTML = '<p class="notification-empty">No pending takeovers.</p>';
+        return;
+      }
+      list.replaceChildren(...items.map((item) => {
+        const link = document.createElement('a');
+        link.href = `/#${item.id}`;
+        link.dataset.notificationItem = '';
+        link.dataset.targetId = item.id;
+        link.dataset.eventId = item.code;
+        link.dataset.title = item.title;
+        const icon = document.createElement('span');
+        icon.className = 'notification-item-icon bell-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        const copy = document.createElement('span');
+        copy.className = 'notification-item-copy';
+        const strong = document.createElement('strong');
+        strong.textContent = item.title;
+        const span = document.createElement('span');
+        span.textContent = shortCode(item.code);
+        span.title = item.code;
+        copy.append(strong, span);
+        link.append(icon, copy);
+        return link;
+      }));
+    }
+
+    function setTrayOpen(open) {
+      if (!tray) return;
+      tray.hidden = !open;
+      trigger?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    trigger?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      renderList();
+      setTrayOpen(!!tray?.hidden);
+    });
+    document.querySelector('[data-notification-close]')?.addEventListener('click', () => {
+      setTrayOpen(false);
+    });
+    list?.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('a[data-notification-item]')) setTrayOpen(false);
+    });
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!tray?.hidden && target && !tray.contains(target) && !trigger?.contains(target)) {
+        setTrayOpen(false);
+      }
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setTrayOpen(false);
+    });
+
+    if (!('EventSource' in window)) return;
+
+    function renderCount(value) {
+      const count = Math.max(0, Number(value) || 0);
+      badge.hidden = count === 0;
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.setAttribute('aria-label', `${count} pending takeover${count === 1 ? '' : 's'}`);
+      badge.closest('.notification-link')?.classList.toggle('has-notifications', count > 0);
+    }
+
+    const source = new EventSource('/events/stream');
+    source.addEventListener('notifications', function (event) {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        renderCount(payload.pending_count);
+        if (Array.isArray(payload.pending)) {
+          pendingSnapshot = payload.pending.map((item) => ({
+            id: `event-${String(item.event_id || '')}`,
+            title: String(item.title || 'challenge'),
+            code: String(item.event_id || ''),
+          })).filter((item) => item.id);
+        }
+        if (!tray?.hidden) renderList();
+        if (payload.kind !== 'snapshot' && window.htmx) {
+          const events = document.getElementById('events');
+          if (events) window.htmx.trigger(events, 'opensesame:notifications');
+        }
+      } catch (_) {
+        // Ignore malformed SSE payloads; the next event will resync the badge.
+      }
+    });
+  })();
+</script>

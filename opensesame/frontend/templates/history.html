@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="description" content="OpenSesame resolved takeover history.">
+        <meta name="keywords"
+              content="OpenSesame, VoidCrawl, Cascading Labs, history">
+        <title>OpenSesame History</title>
+        {% include "theme-init.html" %}
+        <link rel="stylesheet" href="{{ url_for('static', path='global.css') }}">
+    </head>
+    <body>
+        {% include "nav.html" %}
+        <main>
+            {% if resolved %}
+                {% for event in resolved %}
+                    <section class="event resolved" id="event-{{ event.event_id }}">
+                        <h2>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</h2>
+                        <div class="meta">
+                            <p><strong>Event:</strong> <code>{{ event.event_id }}</code></p>
+                            <p><strong>Session:</strong> <code>{{ event.session_id }}</code></p>
+                            {% if event.url %}<p><strong>URL:</strong> <a href="{{ event.url }}">{{ event.url }}</a></p>{% endif %}
+                            {% set resolver_label = "manual noVNC" if event.resolver == "manual_novnc" or (event.resolver == "manual_vnc" and event.novnc_url) else (event.resolver or "unknown") %}
+                            <p><strong>Resolver:</strong> {{ resolver_label }}</p>
+                        </div>
+                        {% if event.note %}<p class="muted">{{ event.note }}</p>{% endif %}
+                    </section>
+                {% endfor %}
+            {% else %}
+                <p class="empty">No resolved takeovers yet.</p>
+            {% endif %}
+        </main>
+        {% include "theme-script.html" %}
+        {% include "notifications-script.html" %}
+    </body>
+</html>

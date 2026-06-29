@@ -1,0 +1,22 @@
+<script>
+  (function () {
+    function getCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+    function getPreference() {
+      var cookie = getCookie('cl-theme');
+      var stored = localStorage.getItem('starlight-theme');
+      var value = cookie || stored;
+      return value === 'light' || value === 'dark' ? value : 'auto';
+    }
+    function resolve(preference) {
+      return preference === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        : preference;
+    }
+    var preference = getPreference();
+    document.documentElement.dataset.theme = resolve(preference);
+    document.documentElement.dataset.themePreference = preference;
+  })();
+</script>

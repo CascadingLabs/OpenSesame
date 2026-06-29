@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+import subprocess
 import sys
+import urllib.parse
 import urllib.request
 import webbrowser
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from rich.console import Console
 from voidcrawl import BrowserConfig, BrowserSession
@@ -69,6 +73,62 @@ async def should_open_ui(ui_prompt: bool) -> bool:
     return answer.strip().lower() == "o"
 
 
+def url_is_ready(url: str) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=1) as response:
+            status = int(response.status)
+            return 200 <= status < 500
+    except Exception:
+        return False
+
+
+def start_opensesame_server(
+    *, opensesame_url: str, db_path: Path, notify: bool = False
+) -> subprocess.Popen[str] | None:
+    if url_is_ready(opensesame_url):
+        return None
+
+    parsed = urllib.parse.urlparse(opensesame_url)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or 8765
+    executable = shutil.which("opensesame") or sys.argv[0]
+    command = [
+        executable,
+        "serve",
+        "--host",
+        host,
+        "--port",
+        str(port),
+        "--public-url",
+        opensesame_url,
+        "--db",
+        str(db_path),
+        "--no-open-on-event",
+        "--no-open-prompt",
+    ]
+    if not notify:
+        command.append("--no-notify")
+
+    console.print(f"[dim]starting OpenSesame server:[/] {opensesame_url}")
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    for _ in range(40):
+        if process.poll() is not None:
+            raise RuntimeError("OpenSesame server exited during startup")
+        if url_is_ready(opensesame_url):
+            return process
+        import time
+
+        time.sleep(0.25)
+    process.terminate()
+    raise RuntimeError(f"OpenSesame server did not become ready: {opensesame_url}")
+
+
 def post_json(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -99,10 +159,16 @@ async def run_demo(
     poll_interval: float = 1.0,
     open_ui: bool = False,
     ui_prompt: bool = True,
+    serve_ui: bool = True,
 ) -> None:
     store = TakeoverStore(db_path)
     await store.init()
     target_url = url or DEMO_TARGETS[challenge_type]
+    server_process = (
+        start_opensesame_server(opensesame_url=opensesame_url, db_path=db_path)
+        if serve_ui
+        else None
+    )
     console.print(
         f"OpenSesame UI: [link={opensesame_url}]{opensesame_url}[/link]"
     )
@@ -115,6 +181,39 @@ async def run_demo(
     )
 
     console.print(f"[bold]navigating[/] {target_url}")
+    try:
+        await drive_demo_browser(
+            config=config,
+            target_url=target_url,
+            challenge_type=challenge_type,
+            opensesame_url=opensesame_url,
+            vnc_url=vnc_url,
+            novnc_url=novnc_url,
+            timeout=timeout,
+            poll_interval=poll_interval,
+            store=store,
+        )
+    finally:
+        if server_process is not None:
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+
+
+async def drive_demo_browser(
+    *,
+    config: BrowserConfig,
+    target_url: str,
+    challenge_type: str,
+    opensesame_url: str,
+    vnc_url: str,
+    novnc_url: str,
+    timeout: float,
+    poll_interval: float,
+    store: TakeoverStore,
+) -> None:
     async with BrowserSession(config) as browser:
         page = await browser.new_page("about:blank")
         nav_error: str | None = None
@@ -140,7 +239,8 @@ async def run_demo(
             target_id = None
             console.print(f"[yellow]target id unavailable:[/] {exc}")
         websocket_url = await browser.websocket_url()
-        event_id = f"demo-{challenge_type}-{target_id or 'takeover'}"
+        event_suffix = target_id or uuid4().hex[:12]
+        event_id = f"demo-{challenge_type}-{event_suffix}"
         captcha_kind = str(captcha) if captcha else challenge_type
 
         capture_payload = {

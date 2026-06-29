@@ -4,6 +4,8 @@ import asyncio
 import importlib.metadata
 import json
 import os
+import sys
+import threading
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -66,6 +68,23 @@ def wants_json(ctx: click.Context) -> bool:
     return bool(ctx.obj and ctx.obj.get("json"))
 
 
+def _open_url_prompt_loop(url: str) -> None:
+    while True:
+        try:
+            answer = console.input("Press [bold]o[/]+Enter to open OpenSesame: ")
+        except (EOFError, KeyboardInterrupt):
+            return
+        if answer.strip().lower() == "o":
+            webbrowser.open(url)
+
+
+def prompt_open_url(url: str) -> None:
+    if not sys.stdin.isatty():
+        return
+
+    threading.Thread(target=_open_url_prompt_loop, args=(url,), daemon=True).start()
+
+
 @click.group(context_settings=_CONTEXT_SETTINGS)
 @click.option("--json", "json_output", "-j", is_flag=True, help="Emit JSON output.")
 @click.version_option(package_version(), "--version", "-v", prog_name="opensesame")
@@ -82,6 +101,7 @@ def main(ctx: click.Context, json_output: bool) -> None:
 @click.option("--public-url", default=None, help="URL used in notifications.")
 @click.option("--notify/--no-notify", default=True)
 @click.option("--open-on-event/--no-open-on-event", default=True)
+@click.option("--open-prompt/--no-open-prompt", default=True)
 @click.option(
     "--db",
     "db_path",
@@ -96,6 +116,7 @@ def serve(
     public_url: str | None,
     notify: bool,
     open_on_event: bool,
+    open_prompt: bool,
     db_path: Path,
 ) -> None:
     """Serve the FastAPI/HTMX operator UI."""
@@ -105,6 +126,8 @@ def serve(
     else:
         console.print(f"[bold green]OpenSesame[/] serving {url}")
         console.print(f"storage: [cyan]{db_path}[/]")
+        if open_prompt:
+            prompt_open_url(url)
     run_asgi_app(
         db_path=db_path,
         public_url=url,
@@ -162,6 +185,11 @@ def demo() -> None:
 @click.option("--novnc-url", default=DEFAULT_NOVNC_URL)
 @click.option("--vnc-url", default=DEFAULT_VNC_URL)
 @click.option("--timeout", default=15.0, type=float, help="Navigation timeout seconds.")
+@click.option(
+    "--serve-ui/--no-serve-ui",
+    default=True,
+    help="Start OpenSesame if needed.",
+)
 @click.option("--open-ui", is_flag=True, help="Open OpenSesame immediately.")
 @click.option(
     "--ui-prompt/--no-ui-prompt",
@@ -186,6 +214,7 @@ def demo_run(
     novnc_url: str,
     vnc_url: str,
     timeout: float,
+    serve_ui: bool,
     open_ui: bool,
     ui_prompt: bool,
     db_path: Path,
@@ -202,6 +231,7 @@ def demo_run(
                 "db": str(db_path),
                 "docker_headful": docker_headful,
                 "timeout": timeout,
+                "serve_ui": serve_ui,
                 "open_ui": open_ui,
                 "ui_prompt": ui_prompt,
             }
@@ -218,6 +248,7 @@ def demo_run(
             novnc_url=novnc_url,
             vnc_url=vnc_url,
             timeout=timeout,
+            serve_ui=serve_ui,
             open_ui=open_ui,
             ui_prompt=ui_prompt,
         )
@@ -239,6 +270,7 @@ def demo_options(fn: Any) -> Any:
     fn = click.option("--novnc-url", default=DEFAULT_NOVNC_URL)(fn)
     fn = click.option("--vnc-url", default=DEFAULT_VNC_URL)(fn)
     fn = click.option("--timeout", default=15.0, type=float)(fn)
+    fn = click.option("--serve-ui/--no-serve-ui", default=True)(fn)
     fn = click.option(
         "--open-ui", is_flag=True, help="Open OpenSesame immediately."
     )(fn)
@@ -267,6 +299,7 @@ def invoke_demo(
     novnc_url: str,
     vnc_url: str,
     timeout: float,
+    serve_ui: bool,
     open_ui: bool,
     ui_prompt: bool,
     db_path: Path,
@@ -282,6 +315,7 @@ def invoke_demo(
         novnc_url=novnc_url,
         vnc_url=vnc_url,
         timeout=timeout,
+        serve_ui=serve_ui,
         open_ui=open_ui,
         ui_prompt=ui_prompt,
         db_path=db_path,

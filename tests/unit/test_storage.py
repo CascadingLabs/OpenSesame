@@ -31,5 +31,5 @@ async def test_takeover_event_lifecycle(tmp_path):
     resolved = await store.resolve_event("event-1", note="operator cleared it")
     assert resolved is not None
     assert resolved.status == "resolved"
-    assert resolved.resolver == "manual_vnc"
+    assert resolved.resolver == "manual_novnc"
     assert resolved.note == "operator cleared it"
