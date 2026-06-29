@@ -1,0 +1,28 @@
+{% if events %}
+  {% for event in events %}
+    <section class="event {{ event.status }}">
+      <h2>{{ event.status | upper }} · {{ event.captcha_kind or event.challenge_vendor or "challenge" }}</h2>
+      <div class="meta">
+        <p><strong>Event:</strong> <code>{{ event.event_id }}</code></p>
+        <p><strong>Session:</strong> <code>{{ event.session_id }}</code></p>
+        {% if event.url %}<p><strong>URL:</strong> <a href="{{ event.url }}">{{ event.url }}</a></p>{% endif %}
+      </div>
+      <p class="links">
+        {% if event.vnc_url %}<a class="button" href="{{ event.vnc_url }}">Open VNC</a>{% endif %}
+        {% if event.novnc_url %}<a href="{{ event.novnc_url }}" target="_blank" rel="noreferrer">Open noVNC</a>{% endif %}
+      </p>
+      {% if event.status == "pending" %}
+        <form method="post" action="{{ url_for('resolve_takeover', event_id=event.event_id) }}">
+          <input name="resolver" value="manual_vnc" hidden>
+          <input name="note" placeholder="resolution note">
+          <button type="submit">Mark resolved</button>
+        </form>
+      {% else %}
+        <p><strong>Resolved by:</strong> {{ event.resolver or "unknown" }}</p>
+        {% if event.note %}<p>{{ event.note }}</p>{% endif %}
+      {% endif %}
+    </section>
+  {% endfor %}
+{% else %}
+  <p class="empty">No takeover events yet.</p>
+{% endif %}

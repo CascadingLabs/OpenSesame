@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="OpenSesame local human takeover queue for VoidCrawl challenge sessions.">
+    <meta name="keywords" content="OpenSesame, VoidCrawl, Cascading Labs, human takeover">
+    <title>OpenSesame</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='global.css') }}">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  </head>
+  <body>
+    <header class="header">
+      <div class="brandmark">
+        <img src="{{ url_for('static', path='logo-dark.svg') }}" alt="OpenSesame" width="40" height="40">
+        <p class="eyebrow">Cascading Labs / Human Takeover</p>
+      </div>
+      <h1>OpenSesame</h1>
+      <p class="muted">Minimal operator queue for live VoidCrawl challenge sessions. Use VNC locally, noVNC over remote or SSH.</p>
+    </header>
+    <main id="events" hx-get="/events" hx-trigger="every 2s" hx-swap="innerHTML">
+      {% include "events.html" %}
+    </main>
+  </body>
+</html>

@@ -23,11 +23,52 @@ Self-hosted captcha/token-solving microservice with no paid solver APIs.
 
 ## Usage
 
-<!-- Quickstart: the one or two commands someone copy-pastes to try it. -->
+OpenSesame currently ships a local human-takeover control center for live
+VoidCrawl challenge sessions.
+
+```bash
+uv run opensesame serve
+# or open the browser automatically
+uv run opensesame watch
+```
+
+The operator UI listens on `http://127.0.0.1:8765` by default and stores event
+metadata in async SQLite at `.opensesame/opensesame.sqlite3`.
+
+Create a takeover event from a VoidCrawl `capture_challenge` payload:
+
+```bash
+curl -X POST http://127.0.0.1:8765/api/takeovers \
+  -H 'content-type: application/json' \
+  -d '{"session_id":"demo","event_id":"demo-1","captcha_kind":"turnstile","vnc_url":"vnc://127.0.0.1:5900","novnc_url":"http://127.0.0.1:6080"}'
+```
+
+Use native VNC for local operation and noVNC for remote/SSH operation.
+
+Drive a real local demo with VoidCrawl:
+
+```bash
+# terminal 1: operator UI
+uv run opensesame serve
+
+# terminal 2: browser/noVNC, from ../VoidCrawl
+./docker/run-headful.sh
+
+# terminal 3: launch VoidCrawl to a demo site, send interrupt to OpenSesame,
+# and wait for the UI resolution button
+uv run opensesame demo cloudflare
+```
+
+Then open `http://127.0.0.1:8765`, click into VNC/noVNC, solve the challenge,
+and press **Mark resolved** in OpenSesame. The demo command re-probes the same
+VoidCrawl tab and prints whether the captcha is gone.
 
 ## Development
 
-<!-- Clone, install, run tests. -->
+```bash
+uv sync
+uv run pytest
+```
 
 ## Related projects
 
