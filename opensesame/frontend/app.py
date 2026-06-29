@@ -66,9 +66,7 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
         encoded = json.dumps(data, separators=(",", ":"))
         return f"event: {event}\ndata: {encoded}\n\n"
 
-    async def broadcast_notifications(
-        kind: str, event_id: str | None = None
-    ) -> None:
+    async def broadcast_notifications(kind: str, event_id: str | None = None) -> None:
         payload = await notification_payload(kind, event_id)
         for client in tuple(sse_clients):
             client.put_nowait(payload)
@@ -109,14 +107,12 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
             {"events": events, "pending": pending, "resolved_count": len(resolved)},
         )
 
-    def queue_sort_key(event: TakeoverEvent, sort: str) -> object:
-        if sort == "oldest":
-            return event.created_at
+    def queue_sort_key(event: TakeoverEvent, sort: str) -> str:
         if sort == "kind":
             return event.captcha_kind or event.challenge_vendor or "challenge"
         if sort == "session":
             return event.session_id
-        return event.created_at
+        return ""
 
     def queue_group_key(event: TakeoverEvent, group: str) -> str:
         if group == "kind":
@@ -134,10 +130,14 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
         group: Annotated[str, Query(pattern="^(none|kind|session)$")] = "none",
     ) -> HTMLResponse:
         pending = await store.list_events("pending")
-        reverse = sort == "newest"
-        sorted_pending = sorted(
-            pending, key=lambda event: queue_sort_key(event, sort), reverse=reverse
-        )
+        if sort in ("newest", "oldest"):
+            sorted_pending = sorted(
+                pending, key=lambda event: event.created_at, reverse=sort == "newest"
+            )
+        else:
+            sorted_pending = sorted(
+                pending, key=lambda event: queue_sort_key(event, sort)
+            )
         if group == "none":
             groups = [("Pending queue", sorted_pending)]
         else:

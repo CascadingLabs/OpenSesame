@@ -264,16 +264,16 @@ def demo_options(fn: Any) -> Any:
         default=True,
         help="Attach to docker/run-headful.sh Chrome or launch local Chrome.",
     )(fn)
-    fn = click.option(
-        "--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL
-    )(fn)
+    fn = click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)(
+        fn
+    )
     fn = click.option("--novnc-url", default=DEFAULT_NOVNC_URL)(fn)
     fn = click.option("--vnc-url", default=DEFAULT_VNC_URL)(fn)
     fn = click.option("--timeout", default=15.0, type=float)(fn)
     fn = click.option("--serve-ui/--no-serve-ui", default=True)(fn)
-    fn = click.option(
-        "--open-ui", is_flag=True, help="Open OpenSesame immediately."
-    )(fn)
+    fn = click.option("--open-ui", is_flag=True, help="Open OpenSesame immediately.")(
+        fn
+    )
     fn = click.option(
         "--ui-prompt/--no-ui-prompt",
         default=True,

@@ -1,3 +1,5 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -25,55 +27,36 @@ repos:
       - id: commitizen
         stages: [commit-msg]
 
-  # --- Language-specific hooks (uncomment what applies) -----------------
-  #
-  # JS/TS (Biome):
-  # - repo: local
-  #   hooks:
-  #     - id: biome-check
-  #       name: biome check
-  #       entry: bun run biome check --write --no-errors-on-unmatched
-  #       language: system
-  #       files: \.(js|ts|cjs|mjs|jsx|tsx|json|jsonc|css|astro)$
-  #       stages: [pre-commit]
-  #
-  # Python (Ruff):
-  # - repo: https://github.com/astral-sh/ruff-pre-commit
-  #   rev: v0.8.0
-  #   hooks:
-  #     - id: ruff
-  #       args: [--fix]
-  #     - id: ruff-format
-  #
-  # Ansible:
-  # - repo: https://github.com/adrienverge/yamllint
-  #   rev: v1.35.1
-  #   hooks:
-  #     - id: yamllint
-  #       args: [--strict, -c=.yamllint]
-  # - repo: https://github.com/ansible/ansible-lint
-  #   rev: v24.10.0
-  #   hooks:
-  #     - id: ansible-lint
-  #
-  # Rust (run cargo fmt + clippy locally via pre-commit):
-  # - repo: https://github.com/doublify/pre-commit-rust
-  #   rev: v1.0
-  #   hooks:
-  #     - id: fmt
-  #     - id: clippy
-  #       args: [--all-targets, --all-features, --, -D, warnings]
-  #
-  # Go (uses local hooks to avoid pinning module versions):
-  # - repo: local
-  #   hooks:
-  #     - id: go-fmt
-  #       name: go fmt
-  #       entry: gofmt -l -w
-  #       language: system
-  #       files: \.go$
-  #     - id: go-vet
-  #       name: go vet
-  #       entry: go vet ./...
-  #       language: system
-  #       pass_filenames: false
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check --fix
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        types_or: [python, pyi]
+
+      - id: djlint
+        name: djlint reformat
+        entry: uv run djlint --reformat
+        language: system
+        files: ^opensesame/frontend/templates/.*\.html$
+
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        stages: [manual]

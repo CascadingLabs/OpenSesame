@@ -176,9 +176,7 @@ async def run_demo(
         if serve_ui
         else None
     )
-    console.print(
-        f"OpenSesame UI: [link={opensesame_url}]{opensesame_url}[/link]"
-    )
+    console.print(f"OpenSesame UI: [link={opensesame_url}]{opensesame_url}[/link]")
     if open_ui or await should_open_ui(ui_prompt):
         webbrowser.open(opensesame_url)
     config = browser_config(

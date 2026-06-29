@@ -38,25 +38,25 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert home.status_code == 200
         assert "opensesame-logo.svg" in home.text
         assert "opensesame-logo-light.svg" in home.text
-        assert "aria-label=\"Docs\"" in home.text
-        assert "title=\"Docs\"" in home.text
-        assert "aria-label=\"Notifications\"" in home.text
-        assert "id=\"notification-tray\"" in home.text
+        assert 'aria-label="Docs"' in home.text
+        assert 'title="Docs"' in home.text
+        assert 'aria-label="Notifications"' in home.text
+        assert 'id="notification-tray"' in home.text
         assert "data-notification-list" in home.text
-        assert "aria-label=\"Workbench\"" in home.text
-        assert "aria-label=\"Queue\"" in home.text
-        assert "aria-label=\"History\"" in home.text
-        assert 'data-notification-badge' in home.text
+        assert 'aria-label="Workbench"' in home.text
+        assert 'aria-label="Queue"' in home.text
+        assert 'aria-label="History"' in home.text
+        assert "data-notification-badge" in home.text
         assert 'id="events"' in home.text
         assert 'hx-get="/events"' in home.text
-        assert 'opensesame:notifications' in home.text
+        assert "opensesame:notifications" in home.text
 
         create_voidcrawl_event(client, "event-1")
 
         home_with_notification = client.get("/")
         assert home_with_notification.status_code == 200
-        assert 'data-notification-badge' in home_with_notification.text
-        assert '>1</span>' in home_with_notification.text
+        assert "data-notification-badge" in home_with_notification.text
+        assert ">1</span>" in home_with_notification.text
 
         events = client.get("/events")
         assert events.status_code == 200
