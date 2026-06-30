@@ -1,0 +1,76 @@
+<script>
+  (function () {
+    const order = ['dark', 'light', 'auto'];
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    function getStoredTheme() {
+      const stored = getCookie('cl-theme') || localStorage.getItem('starlight-theme');
+      return stored === 'light' || stored === 'dark' ? stored : 'auto';
+    }
+
+    function resolvedTheme(preference) {
+      return preference === 'auto' ? (media.matches ? 'light' : 'dark') : preference;
+    }
+
+    function syncThemedImages(theme) {
+      const key = theme === 'light' ? 'srcLight' : 'srcDark';
+      document.querySelectorAll('.themed-img').forEach((img) => {
+        if (img.dataset[key]) img.src = img.dataset[key];
+      });
+    }
+
+    function updateIcons(preference) {
+      document.querySelectorAll('.theme-toggle-icon').forEach((icon) => {
+        const active =
+          (preference === 'dark' && icon.classList.contains('theme-icon-moon')) ||
+          (preference === 'light' && icon.classList.contains('theme-icon-sun')) ||
+          (preference === 'auto' && icon.classList.contains('theme-icon-auto'));
+        icon.classList.toggle('active', active);
+        icon.classList.toggle('exit', !active);
+        if (!active) setTimeout(() => icon.classList.remove('exit'), 400);
+      });
+    }
+
+    function applyTheme(preference, animate) {
+      const commit = () => {
+        const theme = resolvedTheme(preference);
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.dataset.themePreference = preference;
+        syncThemedImages(theme);
+        updateIcons(preference);
+      };
+      const cookieValue = preference === 'light' || preference === 'dark' ? preference : 'auto';
+      document.cookie = `cl-theme=${cookieValue}; path=/; max-age=31536000; SameSite=Lax`;
+      localStorage.setItem('starlight-theme', preference === 'auto' ? '' : preference);
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (animate && !reduced && typeof document.startViewTransition === 'function') {
+        document.startViewTransition(commit);
+      } else {
+        commit();
+      }
+    }
+
+    applyTheme(getStoredTheme(), false);
+
+    document.querySelectorAll('.theme-toggle').forEach((button) => {
+      button.addEventListener('click', () => {
+        const current = getStoredTheme();
+        const next = order[(order.indexOf(current) + 1) % order.length];
+        applyTheme(next, true);
+      });
+    });
+
+    media.addEventListener('change', () => {
+      if (getStoredTheme() === 'auto') applyTheme('auto', false);
+    });
+
+    window.addEventListener('storage', (event) => {
+      if (event.key === 'starlight-theme') applyTheme(getStoredTheme(), false);
+    });
+  })();
+</script>

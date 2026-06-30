@@ -1,0 +1,177 @@
+{% if pending_count is defined %}
+    {% set nav_pending_count = pending_count %}
+{% elif pending is defined %}
+    {% set nav_pending_count = pending | length %}
+{% else %}
+    {% set nav_pending_count = 0 %}
+{% endif %}
+{% set nav_completed_count = resolved_count | default(0) %}
+<nav class="nav" aria-label="Primary">
+    <a class="nav-brand"
+       href="https://cascadinglabs.com/opensesame/"
+       target="_blank"
+       rel="noreferrer"
+       aria-label="Docs"
+       title="Docs">
+        <img class="os-mark themed-img"
+             src="{{ url_for('static', path='opensesame-logo.svg') }}"
+             data-src-dark="{{ url_for('static', path='opensesame-logo.svg') }}"
+             data-src-light="{{ url_for('static', path='opensesame-logo-light.svg') }}"
+             alt=""
+             width="26"
+             height="26"
+             aria-hidden="true">
+    </a>
+    <div class="nav-stats" aria-label="Queue stats">
+        <span class="nav-stat" title="Pending">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="M12 7v5l3 2"></path>
+            </svg>
+            <span>{{ nav_pending_count }}</span>
+        </span>
+        <span class="nav-stat" title="Completed">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="8"></circle>
+                <path d="m8.5 12.5 2.2 2.2 4.8-5.2"></path>
+            </svg>
+            <span>{{ nav_completed_count }}</span>
+        </span>
+    </div>
+    <div class="nav-actions">
+        <div class="notification-popover">
+            <button class="icon-link notification-link"
+                    type="button"
+                    aria-label="Notifications"
+                    title="Notifications"
+                    aria-haspopup="dialog"
+                    aria-expanded="false"
+                    aria-controls="notification-tray">
+                <span class="nav-icon bell-icon" aria-hidden="true"></span>
+                <span class="notification-badge"
+                      data-notification-badge
+                      aria-label="{{ nav_pending_count }} pending takeover{{ '' if nav_pending_count == 1 else 's' }}"
+                      {% if nav_pending_count == 0 %}hidden{% endif %}>{{ '99+' if nav_pending_count > 99 else nav_pending_count }}</span>
+            </button>
+            <div class="notification-tray"
+                 id="notification-tray"
+                 role="dialog"
+                 aria-labelledby="notification-tray-title"
+                 hidden>
+                <div class="notification-tray-head">
+                    <h2 id="notification-tray-title">Pending takeovers</h2>
+                    <button class="notification-close"
+                            type="button"
+                            data-notification-close
+                            aria-label="Close notifications">×</button>
+                </div>
+                <div class="notification-list" data-notification-list>
+                    {% if pending is defined and pending %}
+                        {% for event in pending %}
+                            <a href="/queue#event-{{ event.event_id }}"
+                               data-notification-item
+                               data-target-id="event-{{ event.event_id }}"
+                               data-event-id="{{ event.event_id }}"
+                               data-title='{{ event.captcha_kind or event.challenge_vendor or "challenge" }}'>
+                                <span class="notification-item-icon bell-icon" aria-hidden="true"></span>
+                                <span class="notification-item-copy">
+                                    <strong>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</strong>
+                                    <span title="{{ event.event_id }}">{{ event.event_id[:22] }}
+                                        {% if event.event_id | length > 22 %}…{% endif %}
+                                    </span>
+                                </span>
+                            </a>
+                        {% endfor %}
+                    {% else %}
+                        <p class="notification-empty">No pending takeovers.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <a class="icon-link" href="/" aria-label="Workbench" title="Workbench">
+            <span class="nav-icon home-icon" aria-hidden="true"></span>
+        </a>
+        <a class="icon-link"
+           href="{{ url_for('queue') }}"
+           aria-label="Queue"
+           title="Queue">
+            <span class="nav-icon queue-icon" aria-hidden="true"></span>
+        </a>
+        <a class="icon-link"
+           href="{{ url_for('history') }}"
+           aria-label="History"
+           title="History">
+            <span class="nav-icon history-icon" aria-hidden="true"></span>
+        </a>
+        <a class="icon-link"
+           href="https://discord.gg/c8MKEaWEEK"
+           target="_blank"
+           rel="noreferrer"
+           aria-label="Discord"
+           title="Discord">
+            <span class="nav-icon discord-icon" aria-hidden="true"></span>
+        </a>
+        <a class="icon-link"
+           href="https://github.com/CascadingLabs/OpenSesame"
+           target="_blank"
+           rel="noreferrer"
+           aria-label="GitHub"
+           title="GitHub">
+            <span class="nav-icon github-icon" aria-hidden="true"></span>
+        </a>
+        <button class="theme-toggle"
+                type="button"
+                aria-label="Toggle theme"
+                title="Toggle theme">
+            <svg class="theme-toggle-icon theme-icon-sun"
+                 xmlns="http://www.w3.org/2000/svg"
+                 width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 stroke-linecap="round"
+                 stroke-linejoin="round"
+                 aria-hidden="true">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2"></path>
+                <path d="M12 20v2"></path>
+                <path d="m4.93 4.93 1.41 1.41"></path>
+                <path d="m17.66 17.66 1.41 1.41"></path>
+                <path d="M2 12h2"></path>
+                <path d="M20 12h2"></path>
+                <path d="m6.34 17.66-1.41 1.41"></path>
+                <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+            <svg class="theme-toggle-icon theme-icon-moon"
+                 xmlns="http://www.w3.org/2000/svg"
+                 width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 stroke-linecap="round"
+                 stroke-linejoin="round"
+                 aria-hidden="true">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+            </svg>
+            <svg class="theme-toggle-icon theme-icon-auto"
+                 xmlns="http://www.w3.org/2000/svg"
+                 width="14"
+                 height="14"
+                 viewBox="0 0 24 24"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="2"
+                 stroke-linecap="round"
+                 stroke-linejoin="round"
+                 aria-hidden="true">
+                <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                <path d="M8 21h8"></path>
+                <path d="M12 17v4"></path>
+            </svg>
+        </button>
+    </div>
+</nav>

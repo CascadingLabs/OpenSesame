@@ -1,0 +1,51 @@
+<div data-pending-count="{{ pending | length }}" hidden></div>
+{% set event = pending[0] if pending else none %}
+{% if event %}
+    <section class="takeover-stack" aria-label="Pending takeover stack">
+        <section class="event pending" id="event-{{ event.event_id }}">
+            <div class="event-head">
+                <div class="event-title">
+                    <span class="badge">{{ pending | length }} pending</span>
+                    <h2>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</h2>
+                    <span class="muted">Solve the active noVNC session, then mark it resolved or select rows below.</span>
+                </div>
+                <form class="resolve-form"
+                      method="post"
+                      action="{{ url_for('resolve_takeover', event_id=event.event_id) }}">
+                    <input name="resolver"
+                           value="{{ 'manual_novnc' if event.novnc_url else 'manual_vnc' }}"
+                           hidden>
+                    <input name="note" placeholder="note">
+                    <button type="submit">✓ Resolved</button>
+                </form>
+            </div>
+            {% if event.novnc_url %}
+                {% include "novnc.html" %}
+            {% endif %}
+        </section>
+        {% if pending | length > 1 %}
+            <div class="tray">
+                <span>{{ pending | length - 1 }} more pending takeover{{ '' if pending | length == 2 else 's' }} waiting behind this one.</span>
+                <a class="button" href="/queue">Manage queue</a>
+            </div>
+        {% endif %}
+    </section>
+{% else %}
+    <section class="empty-state" role="status" aria-live="polite">
+        <svg class="empty-state-svg"
+             viewBox="0 0 220 160"
+             role="img"
+             aria-labelledby="empty-state-title empty-state-desc"
+             xmlns="http://www.w3.org/2000/svg">
+            <title id="empty-state-title">All solved</title>
+            <desc id="empty-state-desc">A completed stack of cards with a check mark.</desc>
+            <rect x="46" y="36" width="118" height="84" rx="14" fill="currentColor" opacity="0.08" />
+            <rect x="58" y="26" width="118" height="84" rx="14" fill="currentColor" opacity="0.12" />
+            <rect x="70" y="16" width="118" height="84" rx="14" fill="none" stroke="currentColor" stroke-width="6" />
+            <path d="M98 59l21 20 43-48" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M38 129h144" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" opacity="0.18" />
+        </svg>
+        <h2>All solved</h2>
+        <p class="muted">No pending takeovers. New challenges will appear here when they need attention.</p>
+    </section>
+{% endif %}
