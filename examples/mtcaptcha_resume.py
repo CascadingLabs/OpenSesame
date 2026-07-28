@@ -5,16 +5,17 @@ repeatable challenge that benefits from a real human in the live browser.
 
 Flow:
 
-1. Start VoidCrawl's headful Docker browser so there is a visible noVNC session.
+1. Start VoidCrawl's Neko/Chromium browser appliance so there is a visible session.
 2. Navigate one VoidCrawl tab to https://2captcha.com/demo/mtcaptcha.
-3. Queue that same tab in OpenSesame with VNC/noVNC links and capture evidence.
-4. Solve the challenge manually in noVNC, then click Resolved in OpenSesame.
+3. Queue that same tab in OpenSesame with a remote-browser link and capture evidence.
+4. Solve the challenge manually in the remote browser, then click Resolved in
+   OpenSesame.
 5. Resume automation in the original tab and print the after-state.
 
 Run from this OpenSesame checkout:
 
-    # terminal 1, from ../VoidCrawl
-    ./docker/run-headful.sh
+    # terminal 1, from this repo
+    ../VoidCrawl/docker/run-browser.sh
 
     # terminal 2, from this repo
     uv run python examples/mtcaptcha_resume.py --open-ui
@@ -38,6 +39,7 @@ from voidcrawl import BrowserConfig, BrowserSession
 
 from opensesame.demo import (
     DEFAULT_DOCKER_CDP_VERSION_URL,
+    DEFAULT_KASMVNC_URL,
     DEFAULT_NOVNC_URL,
     DEFAULT_OPENSESAME_URL,
     DEFAULT_VNC_URL,
@@ -65,6 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=30.0)
     parser.add_argument("--takeover-timeout", type=float, default=300.0)
     parser.add_argument("--poll-interval", type=float, default=1.0)
+    parser.add_argument("--kasmvnc-url", default=DEFAULT_KASMVNC_URL)
     parser.add_argument("--novnc-url", default=DEFAULT_NOVNC_URL)
     parser.add_argument("--vnc-url", default=DEFAULT_VNC_URL)
     parser.add_argument("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)
@@ -128,6 +131,7 @@ def summarize_capture(capture: dict[str, Any]) -> dict[str, Any]:
         "antibot": challenge.get("antibot"),
         "dom_captcha": challenge.get("dom_captcha"),
         "target_id": attach.get("target_id"),
+        "kasmvnc_url": attach.get("kasmvnc_url"),
         "novnc_url": attach.get("novnc_url"),
         "vnc_url": attach.get("vnc_url"),
     }
@@ -172,6 +176,7 @@ async def run_mtcaptcha_resume(args: argparse.Namespace) -> None:
                 browser=browser,
                 page=page,
                 session_id="mtcaptcha-example",
+                kasmvnc_url=args.kasmvnc_url,
                 vnc_url=args.vnc_url,
                 novnc_url=args.novnc_url,
             )
@@ -198,8 +203,11 @@ async def run_mtcaptcha_resume(args: argparse.Namespace) -> None:
             await asyncio.to_thread(post_json, endpoint, capture)
             print(f"\nsent to OpenSesame: {endpoint}")
             print(f"OpenSesame UI: {args.opensesame_url}/#event-{event_id}")
-            print(f"noVNC:        {args.novnc_url}")
-            print(f"VNC:          {args.vnc_url}")
+            print(f"KasmVNC:      {args.kasmvnc_url}")
+            if args.novnc_url:
+                print(f"legacy noVNC: {args.novnc_url}")
+            if args.vnc_url:
+                print(f"legacy VNC:   {args.vnc_url}")
             print("Solve MTCaptcha in that same browser, then click Resolved.")
 
             resolved_event = await wait_for_open_sesame_resolution(

@@ -1,0 +1,109 @@
+{% set viewer_url = event.operator_url %}
+<div class="remote-browser-panel"
+     id="remote-browser-panel-{{ event.event_id }}"
+     hx-preserve="true">
+    <div class="remote-browser-toolbar">
+        <strong>{{ event.operator_label }} · {{ event.event_id }}</strong>
+        <span class="remote-browser-help">Interactive handoff session. Type or paste credentials only inside the remote browser.</span>
+        <details class="event-details"
+                 id="event-details-{{ event.event_id }}"
+                 hx-preserve="true">
+            <summary>Links/meta</summary>
+            <div class="meta">
+                <p><strong>Event:</strong> <code>{{ event.event_id }}</code></p>
+                <p><strong>Session:</strong> <code>{{ event.session_id }}</code></p>
+                {% if event.url %}
+                    <p><strong>URL:</strong> <a href="{{ event.url }}">{{ event.url }}</a></p>
+                {% endif %}
+                {% if event.websocket_url %}
+                    <p><strong>CDP:</strong> <code>{{ event.websocket_url }}</code></p>
+                {% endif %}
+            </div>
+            <p class="links subtle-links">
+                <a href="{{ viewer_url }}" target="_blank" rel="noreferrer">Detached {{ event.operator_label }}</a>
+                {% if event.vnc_url %}<a href="{{ event.vnc_url }}">Native VNC</a>{% endif %}
+            </p>
+        </details>
+        <a class="remote-browser-primary-link"
+           href="{{ viewer_url }}"
+           target="_blank"
+           rel="noreferrer noopener">Open {{ event.operator_label | lower }}</a>
+    </div>
+    <div class="remote-browser-compat" id="remote-browser-compat-{{ event.event_id }}" hidden>
+        <strong>Browser compatibility:</strong>
+        <span>
+            Firefox, Zen, and Safari are intentionally routed to the detached
+            {{ event.operator_label | lower }} tab because embedded WebRTC and clipboard
+            focus are unreliable there. The detached tab controls the same session and
+            keeps OpenSesame open for resolution.
+        </span>
+    </div>
+    <iframe id="remote-browser-frame-{{ event.event_id }}"
+            class="remote-browser-frame"
+            src="about:blank"
+            data-src="{{ viewer_url }}"
+            title="{{ event.operator_label }} viewer for {{ event.event_id }}"
+            tabindex="0"
+            referrerpolicy="no-referrer"
+            allowfullscreen
+            allow="clipboard-read; clipboard-write; fullscreen; autoplay; camera; microphone; display-capture"></iframe>
+    <div class="remote-browser-help remote-browser-keyboard-help">
+        <p>
+            Choose the desired entry in your host clipboard manager first, then
+            click an input in the remote browser and paste normally with
+            <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>V</kbd> or your desktop paste binding.
+            The paste action syncs the selected clipboard entry into the remote session.
+            OpenSesame stores only the handoff URL and event metadata, never
+            credential values or clipboard contents.
+        </p>
+        <p>
+            Chrome/Chromium usually supports the embedded OpenSesame/Neko WebRTC frame.
+            Firefox, Zen, and Safari are supported through the detached
+            {{ event.operator_label | lower }} link instead of the iframe; it controls the
+            same browser session.
+        </p>
+    </div>
+</div>
+<script>
+(() => {
+  const panel = document.getElementById('remote-browser-panel-{{ event.event_id }}');
+  const frame = document.getElementById('remote-browser-frame-{{ event.event_id }}');
+  const compat = document.getElementById('remote-browser-compat-{{ event.event_id }}');
+  if (!panel || !frame || frame.dataset.focusHooked === 'true') return;
+  frame.dataset.focusHooked = 'true';
+
+  const viewerUrl = {{ viewer_url | tojson }};
+  const ua = navigator.userAgent || '';
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands || [])
+    .map((brand) => brand.brand || '')
+    .join(' ');
+  const isFirefoxFamily = /Firefox|FxiOS|Zen/i.test(`${ua} ${brands}`) ||
+    typeof window.InstallTrigger !== 'undefined';
+  const isSafariFamily = /Safari/i.test(ua) && !/Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS/i.test(ua);
+  const preferDetached = isFirefoxFamily || isSafariFamily;
+  const focusFrame = () => frame.focus({ preventScroll: true });
+  const loadFrame = () => {
+    if (frame.dataset.loaded !== 'true') {
+      frame.src = viewerUrl;
+      frame.dataset.loaded = 'true';
+    }
+    focusFrame();
+  };
+
+  if (preferDetached) {
+    panel.classList.add('remote-browser-prefers-detached');
+    frame.hidden = true;
+    frame.removeAttribute('src');
+    if (compat) compat.hidden = false;
+  } else {
+    loadFrame();
+  }
+
+  panel.addEventListener('pointerdown', () => {
+    if (frame.dataset.loaded === 'true') focusFrame();
+  });
+  frame.addEventListener('load', () => {
+    if (frame.dataset.loaded === 'true') focusFrame();
+  });
+})();
+</script>

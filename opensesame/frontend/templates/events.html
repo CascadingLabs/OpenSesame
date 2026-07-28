@@ -6,20 +6,22 @@
             <div class="event-head">
                 <div class="event-title">
                     <span class="badge">{{ pending | length }} pending</span>
-                    <h2>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</h2>
-                    <span class="muted">Solve the active noVNC session, then mark it resolved or select rows below.</span>
+                    <h2>{{ event.display_kind }}</h2>
+                    <span class="muted">Solve the active remote browser session, then mark it resolved or select rows below.</span>
                 </div>
                 <form class="resolve-form"
                       method="post"
                       action="{{ url_for('resolve_takeover', event_id=event.event_id) }}">
-                    <input name="resolver"
-                           value="{{ 'manual_novnc' if event.novnc_url else 'manual_vnc' }}"
-                           hidden>
+                    <input name="resolver" value="{{ event.manual_resolver }}" hidden>
                     <input name="note" placeholder="note">
                     <button type="submit">✓ Resolved</button>
                 </form>
             </div>
-            {% if event.novnc_url %}
+            {% if event.handoff_url or event.remote_browser_url or event.remote_desktop_url %}
+                {% include "handoff.html" %}
+            {% elif event.kasmvnc_url %}
+                {% include "kasmvnc.html" %}
+            {% elif event.novnc_url %}
                 {% include "novnc.html" %}
             {% endif %}
         </section>

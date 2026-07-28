@@ -34,8 +34,8 @@
                         </thead>
                         <tbody>
                             {% for event in resolved %}
-                                {% set kind = event.captcha_kind or event.challenge_vendor or "challenge" %}
-                                {% set resolver_label = "manual noVNC" if event.resolver == "manual_novnc" or (event.resolver == "manual_vnc" and event.novnc_url) else (event.resolver or "unknown") %}
+                                {% set kind = event.display_kind %}
+                                {% set resolver_label = "manual remote browser" if event.resolver == "manual_remote_browser" else ("manual KasmVNC" if event.resolver == "manual_kasmvnc" else ("manual noVNC" if event.resolver == "manual_novnc" or (event.resolver == "manual_vnc" and event.novnc_url) else (event.resolver or "unknown"))) %}
                                 {% set short_event_id = event.event_id[:18] ~ ("…" if event.event_id | length > 18 else "") %}
                                 <tr id="event-{{ event.event_id }}">
                                     <td>{{ kind }}</td>

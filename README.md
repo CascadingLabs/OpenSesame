@@ -40,10 +40,103 @@ Create a takeover event from a VoidCrawl `capture_challenge` payload:
 ```bash
 curl -X POST http://127.0.0.1:8765/api/takeovers \
   -H 'content-type: application/json' \
-  -d '{"session_id":"demo","event_id":"demo-1","captcha_kind":"turnstile","vnc_url":"vnc://127.0.0.1:5900","novnc_url":"http://127.0.0.1:6080"}'
+  -d '{"session_id":"demo","event_id":"demo-1","captcha_kind":"turnstile","handoff_url":"http://127.0.0.1:3069","remote_browser_url":"http://127.0.0.1:3069"}'
 ```
 
-Use native VNC for local operation and noVNC for remote/SSH operation.
+Use the generic `handoff_url` / `remote_browser_url` fields for the
+VoidCrawl browser appliance or any other live remote-browser handoff. Legacy
+backend-specific fields remain accepted for older VoidCrawl sessions.
+
+Chrome/Chromium is the most reliable local operator browser for the embedded
+OpenSesame/Neko WebRTC view. Firefox, Zen, and Safari can use the same
+OpenSesame web app;
+if the embedded iframe cannot connect or keep keyboard/clipboard focus, click the
+detached **Open remote browser** link, which controls the same remote session.
+Clipboard-manager workflows are expected: select the desired host clipboard entry,
+click the target field inside the remote Chrome session, then paste with
+`Ctrl`/`Cmd`+`V`; the paste action syncs that clipboard entry into the remote
+session. OpenSesame stores only event metadata, not clipboard contents. For a clean
+Chromium test profile:
+
+```bash
+chromium --user-data-dir=/tmp/opensesame-operator --disable-extensions \
+  http://127.0.0.1:8765/#events
+```
+
+OpenSesame also accepts the shared `interrupt.v1` envelope used by Yosoi and
+VoidCrawl:
+
+```bash
+curl -X POST http://127.0.0.1:8765/api/interrupts \
+  -H 'content-type: application/json' \
+  --data-binary @docs/fixtures/interrupts/voidcrawl-captcha.json
+```
+
+Runnable handoff examples:
+
+```bash
+uv run python examples/oauth_handoff.py
+uv run --script examples/yosoi_voidcrawl_latest_interrupt.py --demo-interrupt
+uv run --script examples/browser_local_handoff.py
+uv run --script examples/live_login_handoff.py
+```
+
+## Local browser appliance
+
+For a copy-paste runtime checklist, see [`docs/runtime.md`](docs/runtime.md).
+
+VoidCrawl owns the local browser substrate used by OpenSesame handoffs. It is a
+small Neko + Chromium image, not a vendored browser-image fork:
+
+```bash
+../VoidCrawl/docker/run-browser.sh
+```
+
+Default endpoints:
+
+- Neko live view / `handoff_url`: `http://127.0.0.1:3069`
+- Chromium CDP: `http://127.0.0.1:19222/json/version`
+- Local browser API: `http://127.0.0.1:3060/health`
+- Endpoint contract: `../VoidCrawl/.voidcrawl/browser/browser.json`
+
+The VoidCrawl image exposes CDP for VoidCrawl/Yosoi automation and injects a small
+OpenSesame-compatible shell into the Neko client. The shell auto-connects, hides the stock
+Neko chrome/menus, and leaves only the remote Chromium viewport and transparent
+input overlay. Paste is event-driven: the browser appliance writes the selected
+host clipboard text into the remote X clipboard, then sends the remote paste
+keystroke. OpenSesame itself stores handoff/event metadata only; it does not
+store credential values or clipboard contents.
+
+## Local multimodal host
+
+The automated path starts as a local-only multimodal planner host. Solver engines
+keep control of the browser and clicks; the host only returns typed decisions
+such as which reCAPTCHA grid tiles to select or whether to verify, refresh, or
+escalate.
+
+```bash
+# Pydantic AI v2 model
+uv run opensesame multimodal serve --port 8787 --model <pydantic-ai-v2-model>
+
+# OpenAI-compatible localhost chat-completions/VLM server
+uv run opensesame multimodal serve \
+  --port 8787 \
+  --model local-vlm \
+  --completions-url localhost://12345
+```
+
+`localhost://12345` expands to
+`http://127.0.0.1:12345/v1/chat/completions` and sends image payloads as
+`data:image/...;base64,...` chat-completions image parts.
+
+Useful endpoints:
+
+- `GET /health`
+- `GET /capabilities`
+- `POST /v1/recaptcha/grid/select`
+- `POST /v1/challenges/next-action`
+
+If no model is configured, requests fail closed as `escalate` instead of guessing.
 
 Drive a real local demo with VoidCrawl:
 
@@ -51,8 +144,8 @@ Drive a real local demo with VoidCrawl:
 # terminal 1: operator UI
 uv run opensesame serve
 
-# terminal 2: browser/noVNC, from ../VoidCrawl
-./docker/run-headful.sh
+# terminal 2: self-hosted VoidCrawl browser appliance
+../VoidCrawl/docker/run-browser.sh
 
 # terminal 3: launch VoidCrawl to a demo site, send interrupt to OpenSesame,
 # and wait for the UI resolution button
@@ -72,15 +165,22 @@ uv run opensesame demo recaptcha -A
 DataDome intentionally has no demo target yet; `opensesame demo datadome` reports
 that it needs an owned or respectful fixture before it joins the MPP demo set.
 
-Then open `http://127.0.0.1:8765`, click into VNC/noVNC, solve the challenge,
-and press **Mark resolved** in OpenSesame. The demo command re-probes the same
-VoidCrawl tab and prints whether the captcha is gone.
+Then open the operator UI, solve the challenge in the embedded OpenSesame remote
+browser or detached remote-browser tab, and press **Mark resolved** in OpenSesame:
+
+```bash
+chromium --user-data-dir=/tmp/opensesame-operator --disable-extensions \
+  http://127.0.0.1:8765/#events
+```
+
+The demo command re-probes the same VoidCrawl tab and prints whether the captcha
+is gone.
 
 For the MTCaptcha HITL resume example:
 
 ```bash
-# terminal 1, from ../VoidCrawl
-./docker/run-headful.sh
+# terminal 1, from this repo
+../VoidCrawl/docker/run-browser.sh
 
 # terminal 2, from this repo
 uv run python examples/mtcaptcha_resume.py --open-ui
@@ -89,14 +189,15 @@ uv run opensesame demo mtcaptcha --open-ui
 ```
 
 This sends the same VoidCrawl tab to OpenSesame, lets a human clear the
-MTCaptcha challenge in noVNC/VNC, then resumes automation and re-probes the page.
+MTCaptcha challenge in the OpenSesame remote browser, then resumes automation
+and re-probes the page.
 
 To queue the focused MPP demo set, reCAPTCHA plus Cloudflare, as pending work for
 frontend stress testing without solving any of them:
 
 ```bash
-# terminal 1, from ../VoidCrawl
-./docker/run-headful.sh
+# terminal 1, from this repo
+../VoidCrawl/docker/run-browser.sh
 
 # terminal 2, from this repo
 uv run opensesame demo all

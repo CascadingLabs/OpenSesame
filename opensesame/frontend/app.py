@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from opensesame.events import TakeoverEvent, TakeoverEventCreate
+from opensesame.interrupts import InterruptEnvelope, takeover_from_interrupt
 from opensesame.notify import notify_takeover, open_operator
 from opensesame.storage import DEFAULT_DB_PATH, TakeoverStore
 from opensesame.voidcrawl import VoidCrawlChallengeEnvelope, takeover_from_voidcrawl
@@ -51,9 +52,7 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
             "pending": [
                 {
                     "event_id": event.event_id,
-                    "title": (
-                        event.captcha_kind or event.challenge_vendor or "challenge"
-                    ),
+                    "title": event.display_kind,
                 }
                 for event in pending
             ],
@@ -109,14 +108,14 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
 
     def queue_sort_key(event: TakeoverEvent, sort: str) -> str:
         if sort == "kind":
-            return event.captcha_kind or event.challenge_vendor or "challenge"
+            return event.display_kind
         if sort == "session":
             return event.session_id
         return ""
 
     def queue_group_key(event: TakeoverEvent, group: str) -> str:
         if group == "kind":
-            return str(event.captcha_kind or event.challenge_vendor or "challenge")
+            return event.display_kind
         if group == "session":
             return str(event.session_id)
         return "Pending queue"
@@ -222,9 +221,56 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
         await announce_takeover(request, takeover.event_id)
         return {"ok": True, "event": takeover.model_dump(mode="json")}
 
+    @app.post("/api/interrupts")
+    async def create_interrupt(
+        request: Request, payload: InterruptEnvelope
+    ) -> dict[str, object]:
+        takeover = await store.create_event(takeover_from_interrupt(payload))
+        await broadcast_notifications("created", takeover.event_id)
+        if takeover.status == "pending":
+            await announce_takeover(request, takeover.event_id)
+        return {
+            "ok": True,
+            "event": takeover.model_dump(mode="json"),
+            "interrupt_id": takeover.event_id,
+        }
+
     async def next_pending_target() -> str:
         next_pending = await store.list_events("pending", limit=1)
         return f"/#event-{next_pending[0].event_id}" if next_pending else "/#events"
+
+    async def optional_json_object(request: Request) -> dict[str, Any]:
+        content_type = request.headers.get("content-type", "").lower()
+        if not content_type.startswith("application/json"):
+            return {}
+        raw = await request.body()
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="JSON body must be an object")
+        return body
+
+    @app.get("/events/{event_id}/handoff", response_class=HTMLResponse)
+    async def handoff_viewer(event_id: str, request: Request) -> HTMLResponse:
+        event = await store.get_event(event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        if not event.operator_url:
+            raise HTTPException(status_code=404, detail="no handoff URL for event")
+        return TEMPLATES.TemplateResponse(request, "handoff.html", {"event": event})
+
+    @app.get("/events/{event_id}/kasmvnc", response_class=HTMLResponse)
+    async def kasmvnc_viewer(event_id: str, request: Request) -> HTMLResponse:
+        event = await store.get_event(event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        if not event.kasmvnc_url:
+            raise HTTPException(status_code=404, detail="no KasmVNC URL for event")
+        return TEMPLATES.TemplateResponse(request, "kasmvnc.html", {"event": event})
 
     @app.get("/events/{event_id}/novnc", response_class=HTMLResponse)
     async def novnc_viewer(event_id: str, request: Request) -> HTMLResponse:
@@ -239,7 +285,7 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
     async def resolve_takeovers(request: Request) -> RedirectResponse:
         form = await request.form()
         event_ids = [str(value) for value in form.getlist("event_ids") if str(value)]
-        resolver = str(form.get("resolver") or "manual_novnc")
+        resolver = str(form.get("resolver") or "manual_remote_browser")
         raw_note = form.get("note")
         note = str(raw_note) if raw_note else None
         resolved_events = await store.resolve_events(
@@ -253,7 +299,7 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
     async def resolve_takeover(
         event_id: str,
         note: NoteForm = None,
-        resolver: ResolverForm = "manual_novnc",
+        resolver: ResolverForm = "manual_remote_browser",
     ) -> RedirectResponse:
         event = await store.resolve_event(
             event_id, resolver=resolver, note=note or None
@@ -263,7 +309,36 @@ def create_app(settings: FrontendSettings | None = None) -> FastAPI:
         await broadcast_notifications("resolved", event_id)
         return RedirectResponse(await next_pending_target(), status_code=303)
 
+    @app.post("/api/interrupts/{event_id}/resolve")
+    async def resolve_interrupt(event_id: str, request: Request) -> dict[str, object]:
+        body = await optional_json_object(request)
+        event = await store.resolve_event(
+            event_id,
+            resolver=str(body.get("resolver") or "manual_remote_browser"),
+            note=body.get("note"),
+            status="resolved",
+        )
+        if event is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        await broadcast_notifications("resolved", event_id)
+        return {"ok": True, "event": event.model_dump(mode="json")}
+
+    @app.post("/api/interrupts/{event_id}/fail")
+    async def fail_interrupt(event_id: str, request: Request) -> dict[str, object]:
+        body = await optional_json_object(request)
+        event = await store.resolve_event(
+            event_id,
+            resolver=str(body.get("resolver") or "manual_remote_browser"),
+            note=body.get("note"),
+            status="failed",
+        )
+        if event is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        await broadcast_notifications("failed", event_id)
+        return {"ok": True, "event": event.model_dump(mode="json")}
+
     @app.get("/api/takeovers/{event_id}")
+    @app.get("/api/interrupts/{event_id}")
     async def get_takeover(event_id: str) -> dict[str, object]:
         event = await store.get_event(event_id)
         if event is None:

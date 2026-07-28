@@ -1,11 +1,11 @@
 {% set separator = '&' if '?' in event.novnc_url else '?' %}
-{% set viewer_url = event.novnc_url ~ separator ~ 'autoconnect=1&resize=scale' %}
+{% set viewer_url = event.novnc_url ~ separator ~ 'autoconnect=1&resize=scale&view_only=0&shared=1&show_dot=1' %}
 <div class="novnc-panel"
      id="novnc-panel-{{ event.event_id }}"
      hx-preserve="true">
     <div class="novnc-toolbar">
         <strong>noVNC · {{ event.event_id }}</strong>
-        <span class="novnc-help">If blank, wait for Chrome/noVNC.</span>
+        <span class="novnc-help">Embedded preview. For reliable typing/paste, open interactive noVNC.</span>
         <details class="event-details"
                  id="event-details-{{ event.event_id }}"
                  hx-preserve="true">
@@ -22,11 +22,38 @@
                 {% if event.vnc_url %}<a href="{{ event.vnc_url }}">Native VNC</a>{% endif %}
             </p>
         </details>
-        <a href="{{ viewer_url }}" target="_blank" rel="noreferrer">New tab</a>
+        <a class="novnc-primary-link"
+           href="{{ viewer_url }}"
+           target="_blank"
+           rel="noreferrer">Open interactive noVNC</a>
     </div>
     <iframe id="novnc-frame-{{ event.event_id }}"
             class="novnc-frame"
             src="{{ viewer_url }}"
             title="noVNC viewer for {{ event.event_id }}"
+            tabindex="0"
             allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+    <div class="novnc-help novnc-keyboard-help">
+        <p>
+            Keyboard/clipboard in embedded cross-origin noVNC is browser-dependent.
+            Open interactive noVNC/Detached noVNC uses the same Docker browser session
+            and is the reliable path for typing credentials.
+        </p>
+        <p>
+            For paste: disable keyboard extensions such as Vimium/cVim on the noVNC
+            page, open noVNC's side toolbar clipboard panel, paste text there, then
+            focus the remote input and press Ctrl+V inside the remote browser.
+        </p>
+    </div>
 </div>
+<script>
+(() => {
+  const panel = document.getElementById('novnc-panel-{{ event.event_id }}');
+  const frame = document.getElementById('novnc-frame-{{ event.event_id }}');
+  if (!panel || !frame || frame.dataset.focusHooked === 'true') return;
+  frame.dataset.focusHooked = 'true';
+  const focusFrame = () => frame.focus({ preventScroll: true });
+  panel.addEventListener('pointerdown', focusFrame);
+  frame.addEventListener('load', focusFrame);
+})();
+</script>

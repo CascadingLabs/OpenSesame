@@ -21,8 +21,8 @@ def test_takeover_from_voidcrawl_capture_payload() -> None:
                 "session_id": "session-1",
                 "target_id": "target-1",
                 "websocket_url": "ws://127.0.0.1/devtools/browser/demo",
-                "vnc_url": "vnc://127.0.0.1:5900",
-                "novnc_url": "http://127.0.0.1:6080",
+                "handoff_url": "http://127.0.0.1:3069",
+                "remote_browser_url": "http://127.0.0.1:3069",
             },
         },
     )
@@ -34,5 +34,7 @@ def test_takeover_from_voidcrawl_capture_payload() -> None:
     assert event.target_id == "target-1"
     assert event.captcha_kind == "turnstile"
     assert event.challenge_vendor == "cloudflare"
+    assert event.handoff_url == "http://127.0.0.1:3069"
+    assert event.remote_browser_url == "http://127.0.0.1:3069"
     assert event.evidence["source"] == "voidcrawl.capture_challenge"
     assert event.evidence["blocking"] is True

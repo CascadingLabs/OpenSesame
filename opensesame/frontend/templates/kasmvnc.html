@@ -1,0 +1,47 @@
+{% set kasmvnc_view_url = event.kasmvnc_url ~ ('&' if '?' in event.kasmvnc_url else '?') ~ 'resize=remote&clipboard_seamless=true&clipboard_up=true&clipboard_down=true&show_dot=1' %}
+<div class="kasmvnc-panel"
+     id="kasmvnc-panel-{{ event.event_id }}"
+     hx-preserve="true">
+    <div class="kasmvnc-toolbar">
+        <strong>KasmVNC · {{ event.event_id }}</strong>
+        <span class="kasmvnc-help">Interactive browser session. Use Chromium for seamless clipboard; use KasmVNC's clipboard panel as a fallback.</span>
+        <details class="event-details"
+                 id="event-details-{{ event.event_id }}"
+                 hx-preserve="true">
+            <summary>Links/meta</summary>
+            <div class="meta">
+                <p><strong>Event:</strong> <code>{{ event.event_id }}</code></p>
+                <p><strong>Session:</strong> <code>{{ event.session_id }}</code></p>
+                {% if event.url %}
+                    <p><strong>URL:</strong> <a href="{{ event.url }}">{{ event.url }}</a></p>
+                {% endif %}
+            </div>
+            <p class="links subtle-links">
+                <a href="{{ kasmvnc_view_url }}" target="_blank" rel="noreferrer">Detached KasmVNC</a>
+            </p>
+        </details>
+        <a class="kasmvnc-primary-link"
+           href="{{ kasmvnc_view_url }}"
+           target="_blank"
+           rel="noreferrer">Open KasmVNC</a>
+    </div>
+    <iframe id="kasmvnc-frame-{{ event.event_id }}"
+            class="kasmvnc-frame"
+            src="{{ kasmvnc_view_url }}"
+            title="KasmVNC viewer for {{ event.event_id }}"
+            tabindex="0"
+            allow="clipboard-read; clipboard-write; fullscreen"></iframe>
+    <div class="kasmvnc-help kasmvnc-keyboard-help">
+        <p>
+            Click an input in the remote browser and paste normally with
+            <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>V</kbd> or your desktop paste binding.
+            KasmVNC receives user-initiated paste events directly; OpenSesame does
+            not read or store clipboard contents.
+        </p>
+        <p>
+            Credentials should be typed or pasted only into this remote browser
+            session. OpenSesame stores the KasmVNC URL and event metadata, not the
+            credentials.
+        </p>
+    </div>
+</div>

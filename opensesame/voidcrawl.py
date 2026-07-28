@@ -5,10 +5,12 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from opensesame.events import TakeoverEventCreate
+from opensesame.interrupts import InterruptEnvelope, takeover_from_interrupt
 
 
 class VoidCrawlChallengeEnvelope(BaseModel):
     challenge: dict[str, Any] = Field(default_factory=dict)
+    interrupt: dict[str, Any] | None = None
     operator_hint: str | None = None
 
 
@@ -17,6 +19,20 @@ def takeover_from_voidcrawl(
     *,
     fallback_session_id: str = "voidcrawl",
 ) -> TakeoverEventCreate:
+    if payload.interrupt:
+        interrupt = dict(payload.interrupt)
+        challenge = payload.challenge
+        if not interrupt.get("id") and challenge.get("event_id"):
+            interrupt["id"] = str(challenge["event_id"])
+        return takeover_from_interrupt(
+            InterruptEnvelope.model_validate(
+                {
+                    "status": "blocked" if interrupt.get("blocking", True) else "ok",
+                    "interrupt": interrupt,
+                }
+            )
+        )
+
     challenge = payload.challenge
     attach = _dict(challenge.get("attach_coordinates"))
     antibot = _dict(challenge.get("antibot"))
@@ -27,6 +43,10 @@ def takeover_from_voidcrawl(
         event_id=str(challenge.get("event_id")),
         target_id=_str_or_none(attach.get("target_id")),
         websocket_url=_str_or_none(attach.get("websocket_url")),
+        handoff_url=_str_or_none(attach.get("handoff_url")),
+        remote_browser_url=_str_or_none(attach.get("remote_browser_url")),
+        remote_desktop_url=_str_or_none(attach.get("remote_desktop_url")),
+        kasmvnc_url=_str_or_none(attach.get("kasmvnc_url")),
         novnc_url=_str_or_none(attach.get("novnc_url")),
         vnc_url=_str_or_none(attach.get("vnc_url")),
         url=_str_or_none(challenge.get("url") or dom_captcha.get("page_url")),
