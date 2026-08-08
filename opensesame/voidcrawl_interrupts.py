@@ -10,6 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from typing import Any, Literal
 from urllib import error, request
 
@@ -274,3 +277,78 @@ class VoidCrawlInterruptHandoff:
 
 def _optional_str(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+@dataclass(frozen=True)
+class OpenSesameSession:
+    """A VoidCrawl session that has OpenSesame bound as its interrupt handler.
+
+    Binding happens when the session is opened, not when a page turns out to be
+    unfinishable.  Declaring the handler up front is what makes the operator a
+    participant in the run's lifecycle rather than a fallback bolted onto an
+    error path: any step may call :meth:`require_human` and know where the tab
+    will go.  The boundary from CAS-253 is unchanged -- this process still owns
+    the ``BrowserSession`` and is the only thing that resumes or releases it.
+    """
+
+    browser: Any
+    handoff: VoidCrawlInterruptHandoff
+
+    @property
+    def config(self) -> VoidCrawlHandoffConfig:
+        return self.handoff.config
+
+    async def new_page(self, url: str) -> Any:
+        """Open *url* in the session this handler is bound to."""
+        return await self.browser.new_page(url)
+
+    async def require_human(
+        self,
+        page: Any,
+        *,
+        code: str,
+        summary: str,
+        kind: InterruptKind,
+        subkind: str | None = None,
+        title: str | None = None,
+        ttl_seconds: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> VoidCrawlHandoffResult:
+        """Park *page*, queue it for an operator, and apply their outcome.
+
+        Returns once the operator reaches a terminal state.  ``resolved`` means
+        the same tab was resumed; ``failed`` and ``denied`` mean it was
+        released.  The caller decides what to do next in either case.
+        """
+        from voidcrawl import InterruptRequest
+
+        return await self.handoff.interrupt_and_wait(
+            self.browser,
+            page,
+            InterruptRequest(
+                code=code,
+                summary=summary,
+                ttl_seconds=int(ttl_seconds or self.config.resolution_timeout_seconds),
+            ),
+            kind=kind,
+            subkind=subkind,
+            title=title,
+            metadata=metadata,
+        )
+
+
+@asynccontextmanager
+async def bind_opensesame(
+    browser: Any, config: VoidCrawlHandoffConfig
+) -> AsyncIterator[OpenSesameSession]:
+    """Declare OpenSesame as *browser*'s interrupt handler for this block.
+
+    Use it at the point the session is created, so every step inside the block
+    has a defined place to hand a tab to a human::
+
+        async with BrowserSession(browser_config) as browser:
+            async with bind_opensesame(browser, handoff_config) as session:
+                page = await session.new_page(url)
+                result = await session.require_human(page, ...)
+    """
+    yield OpenSesameSession(browser=browser, handoff=VoidCrawlInterruptHandoff(config))
