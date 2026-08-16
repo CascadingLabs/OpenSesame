@@ -152,6 +152,40 @@ def test_xcaptcha_demo_targets_have_prepare_clicks():
     )
 
 
+def test_multimodal_serve_command_starts_host(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    def fake_run_multimodal_asgi_app(**kwargs: object) -> None:
+        calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "run_multimodal_asgi_app", fake_run_multimodal_asgi_app)
+
+    result = CliRunner().invoke(
+        cli.main,
+        [
+            "multimodal",
+            "serve",
+            "--port",
+            "9876",
+            "--model",
+            "test-vlm",
+            "--completions-url",
+            "localhost://9999",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        {
+            "host": "127.0.0.1",
+            "port": 9876,
+            "model": "test-vlm",
+            "completions_url": "localhost://9999",
+            "completions_timeout_s": 45.0,
+        }
+    ]
+
+
 def test_open_url_prompt_loop_allows_repeated_opens(monkeypatch):
     url = "http://127.0.0.1:8765"
     answers = iter(["o", " O ", "no", "", "o"])
@@ -218,14 +252,30 @@ async def test_demo_uses_voidcrawl_capture_challenge_contract():
         browser=FakeBrowser(),
         page=page,
         session_id="opensesame-demo",
-        vnc_url="vnc://127.0.0.1:5900",
-        novnc_url="http://127.0.0.1:6080",
+        handoff_url="http://127.0.0.1:3069",
+        remote_browser_url="http://127.0.0.1:3069",
+        vnc_url=None,
+        novnc_url=None,
     )
 
     assert capture["challenge"]["event_id"] == "event-1"
     assert page.kwargs == {
         "websocket_url": "ws://127.0.0.1/devtools/browser/demo",
         "session_id": "opensesame-demo",
-        "vnc_url": "vnc://127.0.0.1:5900",
-        "novnc_url": "http://127.0.0.1:6080",
+        "handoff_url": "http://127.0.0.1:3069",
+        "remote_browser_url": "http://127.0.0.1:3069",
+        "kasmvnc_url": None,
+        "vnc_url": None,
+        "novnc_url": None,
     }
+
+
+def test_docker_ws_url_is_rebased_to_requested_host_port():
+    assert demo.normalize_ws_url(
+        "http://127.0.0.1:19222/json/version",
+        "ws://127.0.0.1:9222/devtools/browser/abc",
+    ) == "ws://127.0.0.1:19222/devtools/browser/abc"
+    assert demo.normalize_ws_url(
+        "http://127.0.0.1:19222/json/version",
+        "ws:///devtools/browser/abc",
+    ) == "ws://127.0.0.1:19222/devtools/browser/abc"

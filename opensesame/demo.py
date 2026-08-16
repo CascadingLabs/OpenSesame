@@ -75,8 +75,11 @@ DEMO_PREPARE_SELECTORS = {
 DEMO_ARM_TARGETS = RECAPTCHA_DEMO_TARGETS + CLOUDFLARE_DEMO_TARGETS
 DEFAULT_URL = DEMO_TARGETS["cloudflare"]
 DEFAULT_OPENSESAME_URL = "http://127.0.0.1:8765"
-DEFAULT_NOVNC_URL = "http://127.0.0.1:6080"
-DEFAULT_VNC_URL = "vnc://127.0.0.1:5900"
+DEFAULT_HANDOFF_URL = "http://127.0.0.1:3069"
+DEFAULT_REMOTE_BROWSER_URL = DEFAULT_HANDOFF_URL
+DEFAULT_KASMVNC_URL = DEFAULT_HANDOFF_URL
+DEFAULT_NOVNC_URL: str | None = None
+DEFAULT_VNC_URL: str | None = None
 DEFAULT_DOCKER_CDP_VERSION_URL = "http://127.0.0.1:19222/json/version"
 
 console = Console()
@@ -88,7 +91,18 @@ def resolve_docker_ws_url(version_url: str) -> str:
     ws_url = payload.get("webSocketDebuggerUrl")
     if not isinstance(ws_url, str) or not ws_url:
         raise RuntimeError(f"no webSocketDebuggerUrl in {version_url}")
-    return ws_url
+    return normalize_ws_url(version_url, ws_url)
+
+
+def normalize_ws_url(version_url: str, ws_url: str) -> str:
+    version = urllib.parse.urlparse(version_url)
+    parsed = urllib.parse.urlparse(ws_url)
+    if not parsed.path:
+        return ws_url
+    scheme = "wss" if version.scheme == "https" else "ws"
+    return urllib.parse.urlunparse(
+        (scheme, version.netloc, parsed.path, "", parsed.query, "")
+    )
 
 
 def browser_config(
@@ -106,13 +120,19 @@ async def capture_voidcrawl_challenge(
     browser: BrowserSession,
     page: Any,
     session_id: str,
-    vnc_url: str,
-    novnc_url: str,
+    handoff_url: str | None = None,
+    remote_browser_url: str | None = None,
+    kasmvnc_url: str | None = None,
+    vnc_url: str | None = None,
+    novnc_url: str | None = None,
 ) -> dict[str, Any]:
     websocket_url = await browser.websocket_url()
     capture = await page.capture_challenge(
         websocket_url=websocket_url,
         session_id=session_id,
+        handoff_url=handoff_url or remote_browser_url or kasmvnc_url,
+        remote_browser_url=remote_browser_url or handoff_url or kasmvnc_url,
+        kasmvnc_url=kasmvnc_url,
         vnc_url=vnc_url,
         novnc_url=novnc_url,
     )
@@ -235,8 +255,9 @@ async def run_demo(
     port: int = 9222,
     docker_headful: bool = False,
     docker_version_url: str = DEFAULT_DOCKER_CDP_VERSION_URL,
-    novnc_url: str = DEFAULT_NOVNC_URL,
-    vnc_url: str = DEFAULT_VNC_URL,
+    kasmvnc_url: str | None = DEFAULT_KASMVNC_URL,
+    novnc_url: str | None = DEFAULT_NOVNC_URL,
+    vnc_url: str | None = DEFAULT_VNC_URL,
     timeout: float = 30.0,
     poll_interval: float = 1.0,
     open_ui: bool = False,
@@ -268,6 +289,7 @@ async def run_demo(
             target_url=target_url,
             challenge_type=challenge_type,
             opensesame_url=opensesame_url,
+            kasmvnc_url=kasmvnc_url,
             vnc_url=vnc_url,
             novnc_url=novnc_url,
             timeout=timeout,
@@ -290,8 +312,9 @@ async def drive_demo_browser(
     target_url: str,
     challenge_type: str,
     opensesame_url: str,
-    vnc_url: str,
-    novnc_url: str,
+    kasmvnc_url: str | None,
+    vnc_url: str | None,
+    novnc_url: str | None,
     timeout: float,
     poll_interval: float,
     store: TakeoverStore,
@@ -310,6 +333,9 @@ async def drive_demo_browser(
             browser=browser,
             page=page,
             session_id="opensesame-demo",
+            handoff_url=kasmvnc_url,
+            remote_browser_url=kasmvnc_url,
+            kasmvnc_url=None,
             vnc_url=vnc_url,
             novnc_url=novnc_url,
         )
@@ -334,8 +360,12 @@ async def drive_demo_browser(
         console.print(
             f"Open OpenSesame: [link={opensesame_url}]{opensesame_url}[/link]"
         )
-        console.print(f"VNC:   {vnc_url}")
-        console.print(f"noVNC: {novnc_url}")
+        if kasmvnc_url:
+            console.print(f"Remote browser: {kasmvnc_url}")
+        if novnc_url:
+            console.print(f"legacy noVNC: {novnc_url}")
+        if vnc_url:
+            console.print(f"legacy VNC:   {vnc_url}")
         console.print("Solve in the same browser, then click [bold]Mark resolved[/].")
 
         while True:
@@ -372,8 +402,9 @@ async def arm_all_demo_events(
     port: int = 9222,
     docker_headful: bool = True,
     docker_version_url: str = DEFAULT_DOCKER_CDP_VERSION_URL,
-    novnc_url: str = DEFAULT_NOVNC_URL,
-    vnc_url: str = DEFAULT_VNC_URL,
+    kasmvnc_url: str | None = DEFAULT_KASMVNC_URL,
+    novnc_url: str | None = DEFAULT_NOVNC_URL,
+    vnc_url: str | None = DEFAULT_VNC_URL,
     timeout: float = 20.0,
     serve_ui: bool = True,
     open_ui: bool = False,
@@ -417,6 +448,9 @@ async def arm_all_demo_events(
             browser=browser,
             page=page,
             session_id=f"opensesame-demo-{name}",
+            handoff_url=kasmvnc_url,
+            remote_browser_url=kasmvnc_url,
+            kasmvnc_url=None,
             vnc_url=vnc_url,
             novnc_url=novnc_url,
         )

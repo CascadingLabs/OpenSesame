@@ -20,6 +20,7 @@ from opensesame.demo import (
     CLOUDFLARE_DEMO_TARGETS,
     CLOUDFLARE_TYPE_TARGETS,
     DEFAULT_DOCKER_CDP_VERSION_URL,
+    DEFAULT_KASMVNC_URL,
     DEFAULT_NOVNC_URL,
     DEFAULT_OPENSESAME_URL,
     DEFAULT_VNC_URL,
@@ -62,6 +63,33 @@ def run_asgi_app(
     server.serve()
 
 
+def run_multimodal_asgi_app(
+    *,
+    host: str,
+    port: int,
+    model: str | None,
+    completions_url: str | None,
+    completions_timeout_s: float,
+) -> None:
+    if model:
+        os.environ["OPENSESAME_MM_MODEL"] = model
+    else:
+        os.environ.pop("OPENSESAME_MM_MODEL", None)
+    if completions_url:
+        os.environ["OPENSESAME_MM_COMPLETIONS_URL"] = completions_url
+    else:
+        os.environ.pop("OPENSESAME_MM_COMPLETIONS_URL", None)
+    os.environ["OPENSESAME_MM_COMPLETIONS_TIMEOUT_S"] = str(completions_timeout_s)
+    server = Granian(
+        "opensesame.multimodal.server:create_app_from_env",
+        address=host,
+        port=port,
+        interface=Interfaces.ASGI,
+        factory=True,
+    )
+    server.serve()
+
+
 def package_version() -> str:
     return importlib.metadata.version("opensesame")
 
@@ -96,7 +124,7 @@ def prompt_open_url(url: str) -> None:
 @click.version_option(package_version(), "--version", "-v", prog_name="opensesame")
 @click.pass_context
 def main(ctx: click.Context, json_output: bool) -> None:
-    """OpenSesame human takeover control center."""
+    """OpenSesame human takeover and local solver host tools."""
     ctx.ensure_object(dict)
     ctx.obj["json"] = json_output
 
@@ -172,6 +200,63 @@ def watch(ctx: click.Context, host: str, port: int, db_path: Path) -> None:
     )
 
 
+@main.group("multimodal")
+def multimodal() -> None:
+    """Local multimodal planner host for solver engines."""
+
+
+@multimodal.command("serve")
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8787, type=int)
+@click.option(
+    "--model",
+    default=None,
+    help="Model name passed to Pydantic AI or the localhost completions API.",
+)
+@click.option(
+    "--completions-url",
+    default=None,
+    help="OpenAI-compatible completions URL, or shorthand localhost://PORT.",
+)
+@click.option("--completions-timeout", default=45.0, type=float)
+@click.pass_context
+def multimodal_serve(
+    ctx: click.Context,
+    host: str,
+    port: int,
+    model: str | None,
+    completions_url: str | None,
+    completions_timeout: float,
+) -> None:
+    """Serve the local multimodal planning API without launching a browser."""
+    url = f"http://{host}:{port}"
+    if wants_json(ctx):
+        echo_json(
+            {
+                "event": "multimodal_start",
+                "url": url,
+                "model": model,
+                "completions_url": completions_url,
+            }
+        )
+    else:
+        console.print(f"[bold green]OpenSesame multimodal host[/] serving {url}")
+        console.print("capabilities: [cyan]/capabilities[/]")
+        if completions_url:
+            console.print(f"completions: [cyan]{completions_url}[/]")
+        elif model:
+            console.print(f"model: [cyan]{model}[/]")
+        else:
+            console.print("model: [yellow]not configured[/] (requests escalate safely)")
+    run_multimodal_asgi_app(
+        host=host,
+        port=port,
+        model=model,
+        completions_url=completions_url,
+        completions_timeout_s=completions_timeout,
+    )
+
+
 @main.group()
 def demo() -> None:
     """Drive local VoidCrawl challenge takeover demos."""
@@ -185,9 +270,10 @@ def demo() -> None:
 @click.option(
     "--docker-headful",
     is_flag=True,
-    help="Attach to docker/run-headful.sh Chrome.",
+    help="Attach to the VoidCrawl browser appliance CDP endpoint.",
 )
 @click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)
+@click.option("--kasmvnc-url", default=DEFAULT_KASMVNC_URL)
 @click.option("--novnc-url", default=DEFAULT_NOVNC_URL)
 @click.option("--vnc-url", default=DEFAULT_VNC_URL)
 @click.option("--timeout", default=15.0, type=float, help="Navigation timeout seconds.")
@@ -217,8 +303,9 @@ def demo_run(
     port: int,
     docker_headful: bool,
     docker_version_url: str,
-    novnc_url: str,
-    vnc_url: str,
+    kasmvnc_url: str | None,
+    novnc_url: str | None,
+    vnc_url: str | None,
     timeout: float,
     serve_ui: bool,
     open_ui: bool,
@@ -252,6 +339,7 @@ def demo_run(
             port=port,
             docker_headful=docker_headful,
             docker_version_url=docker_version_url,
+            kasmvnc_url=kasmvnc_url,
             novnc_url=novnc_url,
             vnc_url=vnc_url,
             timeout=timeout,
@@ -270,11 +358,12 @@ def demo_options(fn: Any) -> Any:
     fn = click.option(
         "--docker-headful/--local-headful",
         default=True,
-        help="Attach to docker/run-headful.sh Chrome or launch local Chrome.",
+        help="Attach to the VoidCrawl browser appliance or launch local Chrome.",
     )(fn)
     fn = click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)(
         fn
     )
+    fn = click.option("--kasmvnc-url", default=DEFAULT_KASMVNC_URL)(fn)
     fn = click.option("--novnc-url", default=DEFAULT_NOVNC_URL)(fn)
     fn = click.option("--vnc-url", default=DEFAULT_VNC_URL)(fn)
     fn = click.option("--timeout", default=15.0, type=float)(fn)
@@ -326,8 +415,9 @@ def invoke_demo(
     port: int,
     docker_headful: bool,
     docker_version_url: str,
-    novnc_url: str,
-    vnc_url: str,
+    kasmvnc_url: str | None,
+    novnc_url: str | None,
+    vnc_url: str | None,
     timeout: float,
     serve_ui: bool,
     open_ui: bool,
@@ -342,6 +432,7 @@ def invoke_demo(
         port=port,
         docker_headful=docker_headful,
         docker_version_url=docker_version_url,
+        kasmvnc_url=kasmvnc_url,
         novnc_url=novnc_url,
         vnc_url=vnc_url,
         timeout=timeout,
@@ -361,8 +452,9 @@ def invoke_demo_stress(
     port: int,
     docker_headful: bool,
     docker_version_url: str,
-    novnc_url: str,
-    vnc_url: str,
+    kasmvnc_url: str | None,
+    novnc_url: str | None,
+    vnc_url: str | None,
     timeout: float,
     serve_ui: bool,
     open_ui: bool,
@@ -393,6 +485,7 @@ def invoke_demo_stress(
             port=port,
             docker_headful=docker_headful,
             docker_version_url=docker_version_url,
+            kasmvnc_url=kasmvnc_url,
             novnc_url=novnc_url,
             vnc_url=vnc_url,
             timeout=timeout,
@@ -504,6 +597,7 @@ def demo_mtcaptcha(ctx: click.Context, /, **kwargs: Any) -> None:
 @click.option("--port", default=9222, type=int)
 @click.option("--docker-headful/--local-headful", default=True)
 @click.option("--docker-version-url", default=DEFAULT_DOCKER_CDP_VERSION_URL)
+@click.option("--kasmvnc-url", default=DEFAULT_KASMVNC_URL)
 @click.option("--novnc-url", default=DEFAULT_NOVNC_URL)
 @click.option("--vnc-url", default=DEFAULT_VNC_URL)
 @click.option("--timeout", default=20.0, type=float)
@@ -533,8 +627,9 @@ def demo_arm_all(
     port: int,
     docker_headful: bool,
     docker_version_url: str,
-    novnc_url: str,
-    vnc_url: str,
+    kasmvnc_url: str | None,
+    novnc_url: str | None,
+    vnc_url: str | None,
     timeout: float,
     concurrency: int,
     serve_ui: bool,
@@ -561,6 +656,7 @@ def demo_arm_all(
             port=port,
             docker_headful=docker_headful,
             docker_version_url=docker_version_url,
+            kasmvnc_url=kasmvnc_url,
             novnc_url=novnc_url,
             vnc_url=vnc_url,
             timeout=timeout,
@@ -600,7 +696,7 @@ def list_events(ctx: click.Context, db_path: Path, status: str | None) -> None:
             event.status,
             event.event_id,
             event.session_id,
-            event.captcha_kind or event.challenge_vendor or "-",
+            event.display_kind,
             event.url or "-",
         )
     console.print(table)

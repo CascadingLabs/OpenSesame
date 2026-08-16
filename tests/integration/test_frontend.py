@@ -21,8 +21,9 @@ def create_voidcrawl_event(client: TestClient, event_id: str) -> None:
                 },
                 "attach_coordinates": {
                     "session_id": f"session-{event_id}",
+                    "handoff_url": f"http://127.0.0.1:3069/{event_id}",
+                    "remote_browser_url": f"http://127.0.0.1:3069/{event_id}",
                     "vnc_url": "vnc://127.0.0.1:5900",
-                    "novnc_url": f"http://127.0.0.1:6080/{event_id}",
                 },
             },
         },
@@ -63,16 +64,38 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert "Notifications" not in events.text
         assert "event-1" in events.text
         assert "1 pending" in events.text
-        assert "Solve the active noVNC session" in events.text
+        assert "Solve the active remote browser session" in events.text
         assert "Pending queue" not in events.text
         assert "Mark selected resolved" not in events.text
         assert 'name="event_ids"' not in events.text
-        assert "noVNC" in events.text
+        assert "Remote browser" in events.text
         assert "Native VNC" in events.text
         assert 'hx-preserve="true"' in events.text
         assert 'id="event-details-event-1"' in events.text
-        assert 'id="novnc-frame-event-1"' in events.text
-        assert 'value="manual_novnc"' in events.text
+        assert 'id="remote-browser-frame-event-1"' in events.text
+        expected_allow = (
+            'allow="clipboard-read; clipboard-write; fullscreen; autoplay; '
+            'camera; microphone; display-capture"'
+        )
+        assert expected_allow in events.text
+        assert "Open remote browser" in events.text
+        assert "host clipboard manager" in events.text
+        assert "paste action syncs" in events.text
+        assert "selected clipboard entry" in events.text
+        assert "paste normally" in events.text
+        assert "desktop paste binding" in events.text
+        assert "credential values" in events.text
+        assert "Chrome/Chromium usually supports" in events.text
+        assert "Firefox, Zen, and Safari" in events.text
+        assert "detached" in events.text
+        assert "intentionally routed to the detached" in events.text
+        assert "Try embedded anyway" not in events.text
+        assert "window.InstallTrigger" in events.text
+        assert 'src="about:blank"' in events.text
+        assert 'data-src="http://127.0.0.1:3069/event-1"' in events.text
+        assert "view_only=0" not in events.text
+        assert "show_dot=1" not in events.text
+        assert 'value="manual_remote_browser"' in events.text
 
         queue = client.get("/queue")
         assert queue.status_code == 200
@@ -83,7 +106,7 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert "Created" in queue.text
         assert "Updated" in queue.text
         assert "Workbench" in queue.text
-        assert "Native VNC" in queue.text
+        assert "Remote browser" in queue.text
         assert "event-1" in queue.text
 
         grouped_queue = client.get("/queue?sort=oldest&group=session")
@@ -95,10 +118,9 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert history_with_pending.status_code == 200
         assert 'href="/queue#event-event-1"' in history_with_pending.text
 
-        # Simulate existing rows that recorded noVNC solves as manual_vnc.
         resolved = client.post(
             "/events/event-1/resolve",
-            data={"resolver": "manual_vnc", "note": "operator cleared it"},
+            data={"resolver": "manual_remote_browser", "note": "operator cleared it"},
             follow_redirects=False,
         )
         assert resolved.status_code == 303
@@ -112,14 +134,108 @@ def test_frontend_renders_and_voidcrawl_takeover_flow(tmp_path):
         assert history.status_code == 200
         assert '<table class="event-table history-table">' in history.text
         assert "event-1" in history.text
-        assert "manual noVNC" in history.text
-        assert "manual_vnc" not in history.text
+        assert "manual remote browser" in history.text
+        assert "manual_remote_browser" not in history.text
         assert "Page 1 / 1" in history.text
 
         empty_events = client.get("/events")
         assert empty_events.status_code == 200
         assert "All solved" in empty_events.text
         assert "No pending takeovers" in empty_events.text
+
+
+def test_frontend_renders_generic_remote_browser_takeover_flow(tmp_path):
+    app = create_app(tmp_path / "opensesame.sqlite3", notify=False, open_on_event=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/voidcrawl/challenge",
+            json={
+                "operator_hint": "open remote browser",
+                "challenge": {
+                    "event_id": "browser-event-1",
+                    "url": "https://example.test/browser",
+                    "blocking": True,
+                    "dom_captcha": {
+                        "kind": "turnstile",
+                        "page_url": "https://example.test/browser",
+                        "active": True,
+                    },
+                    "attach_coordinates": {
+                        "session_id": "session-browser",
+                        "handoff_url": "http://127.0.0.1:3069",
+                        "remote_browser_url": "http://127.0.0.1:3069",
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["event"]["handoff_url"] == "http://127.0.0.1:3069"
+        assert response.json()["event"]["remote_browser_url"] == "http://127.0.0.1:3069"
+
+        events = client.get("/events")
+        assert events.status_code == 200
+        assert "Remote browser" in events.text
+        assert 'id="remote-browser-frame-browser-event-1"' in events.text
+        assert 'value="manual_remote_browser"' in events.text
+        assert "novnc-frame-browser-event-1" not in events.text
+
+        queue = client.get("/queue")
+        assert queue.status_code == 200
+        assert "Remote browser" in queue.text
+        assert "http://127.0.0.1:3069" in queue.text
+
+        resolved = client.post(
+            "/events/browser-event-1/resolve",
+            data={"resolver": "manual_remote_browser", "note": "operator cleared it"},
+            follow_redirects=False,
+        )
+        assert resolved.status_code == 303
+
+        history = client.get("/history")
+        assert history.status_code == 200
+        assert "manual remote browser" in history.text
+
+
+def test_frontend_preserves_legacy_novnc_view_params(tmp_path):
+    app = create_app(tmp_path / "opensesame.sqlite3", notify=False, open_on_event=False)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/voidcrawl/challenge",
+            json={
+                "operator_hint": "open noVNC",
+                "challenge": {
+                    "event_id": "legacy-novnc-event",
+                    "url": "https://example.test/legacy",
+                    "blocking": True,
+                    "dom_captcha": {
+                        "kind": "turnstile",
+                        "page_url": "https://example.test/legacy",
+                        "active": True,
+                    },
+                    "attach_coordinates": {
+                        "session_id": "session-legacy",
+                        "novnc_url": "http://127.0.0.1:6080/vnc.html?token=abc",
+                        "vnc_url": "vnc://127.0.0.1:5900",
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200
+
+        events = client.get("/events")
+        assert events.status_code == 200
+        assert 'id="novnc-frame-legacy-novnc-event"' in events.text
+        assert "autoconnect=1" in events.text
+        assert "view_only=0" in events.text
+        assert 'id="remote-browser-frame-legacy-novnc-event"' not in events.text
+
+        direct = client.get("/events/legacy-novnc-event/novnc")
+        assert direct.status_code == 200
+        assert 'id="novnc-frame-legacy-novnc-event"' in direct.text
+        assert "autoconnect=1" in direct.text
+        assert "Native VNC" in direct.text
 
 
 def test_notification_tray_renders_all_items_for_css_scrolling(tmp_path):
@@ -158,7 +274,7 @@ def test_resolving_current_takeover_reveals_next_pending_card(tmp_path):
 
         resolved = client.post(
             "/events/event-2/resolve",
-            data={"resolver": "manual_novnc", "note": "operator cleared it"},
+            data={"resolver": "manual_remote_browser", "note": "operator cleared it"},
             follow_redirects=False,
         )
         assert resolved.status_code == 303
@@ -183,7 +299,7 @@ def test_bulk_resolve_selected_pending_events_and_paginate_history(tmp_path):
             "/events/resolve",
             data={
                 "event_ids": ["event-3", "event-2"],
-                "resolver": "manual_novnc",
+                "resolver": "manual_remote_browser",
                 "note": "batch cleared",
             },
             follow_redirects=False,
@@ -196,7 +312,7 @@ def test_bulk_resolve_selected_pending_events_and_paginate_history(tmp_path):
         event_3 = client.get("/api/takeovers/event-3").json()["event"]
         assert event_1["status"] == "pending"
         assert event_2["status"] == "resolved"
-        assert event_2["resolver"] == "manual_novnc"
+        assert event_2["resolver"] == "manual_remote_browser"
         assert event_2["note"] == "batch cleared"
         assert event_3["status"] == "resolved"
 
@@ -204,7 +320,7 @@ def test_bulk_resolve_selected_pending_events_and_paginate_history(tmp_path):
         assert history.status_code == 200
         assert "Page 1 / 2" in history.text
         assert "Next →" in history.text
-        assert "manual noVNC" in history.text
+        assert "manual remote browser" in history.text
 
         second_page = client.get("/history?page=2&per_page=1")
         assert second_page.status_code == 200

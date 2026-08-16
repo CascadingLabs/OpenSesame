@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
 from opensesame.events import TakeoverEventCreate
@@ -15,8 +17,8 @@ async def test_takeover_event_lifecycle(tmp_path):
         TakeoverEventCreate(
             session_id="session-1",
             event_id="event-1",
-            vnc_url="vnc://127.0.0.1:5900",
-            novnc_url="http://127.0.0.1:6080",
+            handoff_url="http://127.0.0.1:3069",
+            remote_browser_url="http://127.0.0.1:3069",
             captcha_kind="turnstile",
             evidence={"source": "test"},
         )
@@ -34,10 +36,96 @@ async def test_takeover_event_lifecycle(tmp_path):
     resolved = await store.resolve_event("event-1", note="operator cleared it")
     assert resolved is not None
     assert resolved.status == "resolved"
-    assert resolved.resolver == "manual_novnc"
+    assert resolved.resolver == "manual_remote_browser"
     assert resolved.note == "operator cleared it"
     assert await store.count_events(status="pending") == 0
     assert await store.count_events(exclude_status="pending") == 1
+
+
+@pytest.mark.asyncio
+async def test_init_migrates_existing_db_for_handoff_urls(tmp_path):
+    db_path = tmp_path / "opensesame.sqlite3"
+    with sqlite3.connect(db_path) as db:
+        db.execute(
+            """
+            CREATE TABLE takeover_events (
+              event_id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              target_id TEXT,
+              websocket_url TEXT,
+              novnc_url TEXT,
+              vnc_url TEXT,
+              url TEXT,
+              title TEXT,
+              captcha_kind TEXT,
+              challenge_vendor TEXT,
+              evidence_json TEXT NOT NULL DEFAULT '{}',
+              resolver TEXT,
+              note TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+    store = TakeoverStore(db_path)
+    await store.init()
+    created = await store.create_event(
+        TakeoverEventCreate(
+            session_id="session-1",
+            event_id="event-1",
+            handoff_url="http://127.0.0.1:3069",
+            remote_browser_url="http://127.0.0.1:3069",
+        )
+    )
+
+    assert created.handoff_url == "http://127.0.0.1:3069"
+    assert created.remote_browser_url == "http://127.0.0.1:3069"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_create_updates_pending_but_not_terminal_event(tmp_path):
+    store = TakeoverStore(tmp_path / "opensesame.sqlite3")
+    await store.init()
+
+    await store.create_event(
+        TakeoverEventCreate(
+            session_id="session-1",
+            event_id="event-1",
+            evidence={"version": 1},
+        )
+    )
+    updated = await store.create_event(
+        TakeoverEventCreate(
+            session_id="session-2",
+            event_id="event-1",
+            handoff_url="http://127.0.0.1:3069",
+            evidence={"version": 2},
+        )
+    )
+
+    assert updated.session_id == "session-2"
+    assert updated.handoff_url == "http://127.0.0.1:3069"
+    assert updated.evidence == {"version": 2}
+
+    resolved = await store.resolve_event("event-1", note="done")
+    assert resolved is not None
+    stale_retry = await store.create_event(
+        TakeoverEventCreate(
+            session_id="session-3",
+            event_id="event-1",
+            status="pending",
+            handoff_url="http://127.0.0.1:9999",
+            evidence={"version": 3},
+        )
+    )
+
+    assert stale_retry.status == "resolved"
+    assert stale_retry.session_id == "session-2"
+    assert stale_retry.handoff_url == "http://127.0.0.1:3069"
+    assert stale_retry.note == "done"
+    assert stale_retry.evidence == {"version": 2}
 
 
 @pytest.mark.asyncio
@@ -50,7 +138,7 @@ async def test_bulk_resolve_only_updates_pending_events(tmp_path):
             TakeoverEventCreate(
                 session_id=f"session-{event_id}",
                 event_id=event_id,
-                novnc_url=f"http://127.0.0.1:6080/{event_id}",
+                handoff_url=f"http://127.0.0.1:3069/{event_id}",
                 captcha_kind="turnstile",
             )
         )
@@ -68,7 +156,7 @@ async def test_bulk_resolve_only_updates_pending_events(tmp_path):
     assert event_1.note == "already done"
     assert event_2 is not None
     assert event_2.status == "resolved"
-    assert event_2.resolver == "manual_novnc"
+    assert event_2.resolver == "manual_remote_browser"
     assert event_2.note == "batch cleared"
     assert event_3 is not None
     assert event_3.status == "pending"

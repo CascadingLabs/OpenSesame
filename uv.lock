@@ -1394,7 +1394,7 @@ wheels = [
 
 [[package]]
 name = "voidcrawl"
-version = "0.3.8.2"
+version = "0.4.2"
 source = { directory = "../VoidCrawl" }
 dependencies = [
     { name = "click" },

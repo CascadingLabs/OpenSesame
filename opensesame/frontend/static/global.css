@@ -574,8 +574,12 @@ button:not(.theme-toggle):not(.icon-link):not(.notification-close):hover, .butto
   z-index: 5;
 }
 
-.novnc-panel { border: 1px solid var(--cl-accent); margin: 0; }
-.novnc-toolbar {
+.novnc-panel,
+.kasmvnc-panel,
+.remote-browser-panel { border: 1px solid var(--cl-accent); margin: 0; }
+.novnc-toolbar,
+.kasmvnc-toolbar,
+.remote-browser-toolbar {
   align-items: center;
   border-bottom: 1px solid var(--cl-border);
   display: flex;
@@ -585,14 +589,48 @@ button:not(.theme-toggle):not(.icon-link):not(.notification-close):hover, .butto
   padding: .4rem .6rem;
   position: relative;
 }
-.novnc-help { color: var(--cl-text-dim); font-size: .8rem; }
-.novnc-frame {
+.novnc-help,
+.kasmvnc-help,
+.remote-browser-help { color: var(--cl-text-dim); font-size: .8rem; }
+.remote-browser-compat {
+  align-items: center;
+  background: rgba(245, 158, 11, .12);
+  border-bottom: 1px solid var(--cl-border);
+  color: var(--cl-text);
+  display: flex;
+  gap: .6rem;
+  padding: .45rem .6rem;
+}
+.remote-browser-compat[hidden] { display: none; }
+.remote-browser-compat span { color: var(--cl-text-dim); font-size: .82rem; }
+.remote-browser-prefers-detached .remote-browser-frame { display: none; }
+.novnc-keyboard-help,
+.kasmvnc-keyboard-help,
+.remote-browser-keyboard-help { margin: .4rem .6rem; }
+.novnc-primary-link,
+.kasmvnc-primary-link,
+.remote-browser-primary-link {
+  background: var(--cl-accent);
+  border: 1px solid var(--cl-accent);
+  color: var(--cl-bg);
+  padding: .25rem .5rem;
+  text-decoration: none;
+}
+.novnc-frame,
+.kasmvnc-frame,
+.remote-browser-frame {
   background: #000;
   border: 0;
   display: block;
   height: min(64vh, 680px);
   min-height: 420px;
   width: 100%;
+}
+.remote-browser-frame {
+  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: min(72vh, calc(100vw * 9 / 16));
+  min-height: 0;
 }
 .empty { border: 1px dashed var(--cl-border); color: var(--cl-text-dim); padding: 2rem; }
 .empty-state {
@@ -631,25 +669,36 @@ button:not(.theme-toggle):not(.icon-link):not(.notification-close):hover, .butto
   .operator-page #events,
   .operator-page .takeover-stack,
   .operator-page .event.pending,
-  .operator-page .novnc-panel {
+  .operator-page .novnc-panel,
+  .operator-page .kasmvnc-panel,
+  .operator-page .remote-browser-panel {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
   }
-  .operator-page .novnc-frame {
+  .operator-page .novnc-frame,
+  .operator-page .kasmvnc-frame {
     flex: 1 1 0;
     height: auto;
+    min-height: 0;
+  }
+  .operator-page .remote-browser-frame {
+    align-self: center;
+    flex: 0 0 auto;
+    height: auto;
+    max-height: none;
+    max-width: calc((100dvh - 18rem) * 16 / 9);
     min-height: 0;
   }
 }
 
 @media (max-width: 720px) {
   .event-head, .tray, .queue-controls { align-items: flex-start; flex-direction: column; }
-  .novnc-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .novnc-toolbar, .kasmvnc-toolbar, .remote-browser-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .resolve-form { flex-wrap: wrap; width: 100%; }
   form input:not([type="checkbox"]) { min-width: 100%; }
   .event-details[open] { position: static; width: 100%; }
   .pagination { align-items: flex-start; flex-direction: column; }
-  .novnc-frame { min-height: 360px; }
+  .novnc-frame, .kasmvnc-frame, .remote-browser-frame { min-height: 360px; }
 }

@@ -41,7 +41,7 @@
                     <div class="table-toolbar">
                         <strong>Manage pending queue</strong>
                         <span class="muted">Select one or more solved sessions.</span>
-                        <input name="resolver" value="manual_novnc" hidden>
+                        <input name="resolver" value="manual_remote_browser" hidden>
                         <input name="note" placeholder="bulk note">
                         <button type="submit">✓ Mark selected resolved</button>
                     </div>
@@ -100,8 +100,8 @@
                                                 <td>
                                                     <div class="queue-row-links">
                                                         <a href="/#event-{{ queued.event_id }}">Workbench</a>
-                                                        {% if queued.novnc_url %}
-                                                            <a href="{{ queued.novnc_url }}">noVNC</a>
+                                                        {% if queued.operator_url %}
+                                                            <a href="{{ queued.operator_url }}">{{ queued.operator_label }}</a>
                                                         {% endif %}
                                                     </div>
                                                 </td>
@@ -119,16 +119,16 @@
                                                                     {{ queued.title }}
                                                                 </dd>
                                                             {% endif %}
+                                                            {% if queued.operator_url %}
+                                                                <dt>{{ queued.operator_label }}</dt>
+                                                                <dd>
+                                                                    <a href="{{ queued.operator_url }}">{{ queued.operator_url }}</a>
+                                                                </dd>
+                                                            {% endif %}
                                                             {% if queued.vnc_url %}
                                                                 <dt>Native VNC</dt>
                                                                 <dd>
                                                                     <code>{{ queued.vnc_url }}</code>
-                                                                </dd>
-                                                            {% endif %}
-                                                            {% if queued.novnc_url %}
-                                                                <dt>noVNC</dt>
-                                                                <dd>
-                                                                    <a href="{{ queued.novnc_url }}">{{ queued.novnc_url }}</a>
                                                                 </dd>
                                                             {% endif %}
                                                             {% if queued.target_id %}

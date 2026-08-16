@@ -72,10 +72,10 @@
                                data-notification-item
                                data-target-id="event-{{ event.event_id }}"
                                data-event-id="{{ event.event_id }}"
-                               data-title='{{ event.captcha_kind or event.challenge_vendor or "challenge" }}'>
+                               data-title='{{ event.display_kind }}'>
                                 <span class="notification-item-icon bell-icon" aria-hidden="true"></span>
                                 <span class="notification-item-copy">
-                                    <strong>{{ event.captcha_kind or event.challenge_vendor or "challenge" }}</strong>
+                                    <strong>{{ event.display_kind }}</strong>
                                     <span title="{{ event.event_id }}">{{ event.event_id[:22] }}
                                         {% if event.event_id | length > 22 %}…{% endif %}
                                     </span>

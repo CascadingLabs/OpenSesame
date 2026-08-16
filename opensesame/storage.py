@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS takeover_events (
   status TEXT NOT NULL,
   target_id TEXT,
   websocket_url TEXT,
+  handoff_url TEXT,
+  remote_browser_url TEXT,
+  remote_desktop_url TEXT,
+  kasmvnc_url TEXT,
   novnc_url TEXT,
   vnc_url TEXT,
   url TEXT,
@@ -45,6 +49,7 @@ class TakeoverStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         async with self.connect() as db:
             await db.executescript(SCHEMA)
+            await _ensure_columns(db)
             await db.commit()
 
     @asynccontextmanager
@@ -62,16 +67,35 @@ class TakeoverStore:
         async with self.connect() as db:
             await db.execute(
                 """
-                INSERT OR REPLACE INTO takeover_events (
-                  event_id, session_id, status, target_id, websocket_url, novnc_url,
+                INSERT INTO takeover_events (
+                  event_id, session_id, status, target_id, websocket_url, handoff_url,
+                  remote_browser_url, remote_desktop_url, kasmvnc_url, novnc_url,
                   vnc_url, url, title, captcha_kind, challenge_vendor, evidence_json,
                   resolver, note, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(event_id) DO UPDATE SET
+                  session_id = excluded.session_id,
+                  status = excluded.status,
+                  target_id = excluded.target_id,
+                  websocket_url = excluded.websocket_url,
+                  handoff_url = excluded.handoff_url,
+                  remote_browser_url = excluded.remote_browser_url,
+                  remote_desktop_url = excluded.remote_desktop_url,
+                  kasmvnc_url = excluded.kasmvnc_url,
+                  novnc_url = excluded.novnc_url,
+                  vnc_url = excluded.vnc_url,
+                  url = excluded.url,
+                  title = excluded.title,
+                  captcha_kind = excluded.captcha_kind,
+                  challenge_vendor = excluded.challenge_vendor,
+                  evidence_json = excluded.evidence_json,
+                  updated_at = excluded.updated_at
+                WHERE takeover_events.status = 'pending'
                 """,
                 _to_row_values(takeover),
             )
             await db.commit()
-        return takeover
+        return await self.get_event(takeover.event_id) or takeover
 
     async def list_events(
         self,
@@ -139,7 +163,7 @@ class TakeoverStore:
         self,
         event_id: str,
         *,
-        resolver: str = "manual_novnc",
+        resolver: str = "manual_remote_browser",
         note: str | None = None,
         status: str = "resolved",
     ) -> TakeoverEvent | None:
@@ -149,7 +173,7 @@ class TakeoverStore:
                 """
                 UPDATE takeover_events
                 SET status = ?, resolver = ?, note = ?, updated_at = ?
-                WHERE event_id = ?
+                WHERE status = 'pending' AND event_id = ?
                 """,
                 (status, resolver, note, updated_at, event_id),
             )
@@ -160,7 +184,7 @@ class TakeoverStore:
         self,
         event_ids: list[str],
         *,
-        resolver: str = "manual_novnc",
+        resolver: str = "manual_remote_browser",
         note: str | None = None,
         status: str = "resolved",
     ) -> list[TakeoverEvent]:
@@ -191,6 +215,19 @@ class TakeoverStore:
         return [_from_row(row) for row in rows]
 
 
+async def _ensure_columns(db: aiosqlite.Connection) -> None:
+    cursor = await db.execute("PRAGMA table_info(takeover_events)")
+    columns = {str(row[1]) for row in await cursor.fetchall()}
+    for column in (
+        "handoff_url",
+        "remote_browser_url",
+        "remote_desktop_url",
+        "kasmvnc_url",
+    ):
+        if column not in columns:
+            await db.execute(f"ALTER TABLE takeover_events ADD COLUMN {column} TEXT")
+
+
 def _to_row_values(event: TakeoverEvent) -> tuple[Any, ...]:
     return (
         event.event_id,
@@ -198,6 +235,10 @@ def _to_row_values(event: TakeoverEvent) -> tuple[Any, ...]:
         event.status,
         event.target_id,
         event.websocket_url,
+        event.handoff_url,
+        event.remote_browser_url,
+        event.remote_desktop_url,
+        event.kasmvnc_url,
         event.novnc_url,
         event.vnc_url,
         event.url,
